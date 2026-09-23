@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="ScolaPilot aide les écoles privées à suivre les paiements, réduire les impayés et informer les parents depuis un téléphone." />
+  <meta name="theme-color" content="#17333a" />
+  <title>ScolaPilot — La gestion scolaire, enfin simple</title>
+  <style>
+    :root {
+      --ink: #17333a;
+      --ink-2: #2d4b50;
+      --muted: #637479;
+      --paper: #fbfaf6;
+      --cream: #f2efe8;
+      --card: #ffffff;
+      --line: #dfe4df;
+      --teal: #1d6b60;
+      --teal-2: #268577;
+      --mint: #dceee7;
+      --sun: #f1b866;
+      --coral: #e47d61;
+      --shadow: 0 24px 70px rgba(23, 51, 58, .11);
+      --radius-lg: 28px;
+      --radius-md: 18px;
+      --radius-sm: 12px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .container { width: min(1160px, calc(100% - 48px)); margin: 0 auto; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 11px;
+      border: 1px solid rgba(29, 107, 96, .18);
+      border-radius: 999px;
+      color: var(--teal);
+      background: rgba(220, 238, 231, .58);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .eyebrow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 0 4px rgba(228,125,97,.14); }
+    h1, h2, h3, p { margin-top: 0; }
+    h1, h2, h3 { letter-spacing: -.04em; }
+    h1 { font-size: clamp(48px, 7vw, 78px); line-height: .99; margin-bottom: 25px; max-width: 750px; }
+    h2 { font-size: clamp(36px, 4.5vw, 58px); line-height: 1.04; margin-bottom: 18px; }
+    h3 { font-size: 20px; line-height: 1.15; margin-bottom: 9px; }
+    .lead { color: var(--muted); font-size: 18px; line-height: 1.65; max-width: 610px; }
+    .small { color: var(--muted); font-size: 14px; }
+    .accent { color: var(--teal-2); }
+
+    .topbar { background: var(--ink); color: #e8f1ec; font-size: 12px; }
+    .topbar-inner { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+    .topbar strong { color: #fff; }
+    .topbar-right { display: flex; gap: 18px; color: #b9ccc8; }
+
+    header { position: sticky; top: 0; z-index: 20; background: rgba(251,250,246,.88); border-bottom: 1px solid rgba(223,228,223,.8); backdrop-filter: blur(16px); }
+    .nav { min-height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 900; letter-spacing: -.05em; font-size: 21px; }
+    .brand-logo { display: block; width: 174px; height: auto; }
+    .brand-mark { position: relative; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px 11px 11px 4px; background: var(--teal); color: white; box-shadow: 5px 5px 0 var(--sun); }
+    .brand-mark svg { width: 20px; height: 20px; }
+    @keyframes floaty { 0%,100% { transform: translate3d(0,0,0) rotate(0deg); } 50% { transform: translate3d(0,-12px,0) rotate(2deg); } }
+    @keyframes drift { 0%,100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(12px,-9px,0); } }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(228,125,97,.35); } 50% { box-shadow: 0 0 0 8px rgba(228,125,97,0); } }
+    @keyframes glow { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
+    @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    .eyebrow::before { animation: pulse 2.4s ease-out infinite; }
+    .brand-logo { transition: transform .2s ease; }
+    .brand:hover .brand-logo { transform: translateY(-1px); }
+    nav ul { list-style: none; display: flex; align-items: center; gap: 28px; padding: 0; margin: 0; color: var(--ink-2); font-size: 14px; font-weight: 650; }
+    nav a { transition: color .2s ease; }
+    nav a:hover { color: var(--teal); }
+    .nav-actions { display: flex; align-items: center; gap: 11px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 46px; padding: 0 18px; border: 1px solid transparent; border-radius: 999px; font-weight: 800; font-size: 14px; transition: transform .2s ease, box-shadow .2s ease, background .2s ease; }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary { background: var(--teal); color: white; box-shadow: 0 10px 22px rgba(29,107,96,.2); }
+    .btn-primary { position: relative; overflow: hidden; background: linear-gradient(135deg, #268577 0%, #1d6b60 70%); }
+    .btn-primary::after { content: ""; position: absolute; top: -60%; left: -45%; width: 35%; height: 220%; transform: rotate(24deg); background: rgba(255,255,255,.16); transition: left .45s ease; }
+    .btn-primary:hover::after { left: 125%; }
+    .btn-primary:hover { background: #15584f; box-shadow: 0 14px 28px rgba(29,107,96,.27); }
+    .btn-ghost { background: transparent; border-color: var(--line); color: var(--ink); }
+    .btn-ghost:hover { background: white; border-color: #b7c9c3; }
+    .btn-white { background: white; color: var(--ink); }
+    .btn-white:hover { box-shadow: 0 12px 24px rgba(0,0,0,.12); }
+    .menu-button { display: none; border: 0; background: transparent; width: 42px; height: 42px; border-radius: 12px; color: var(--ink); }
+
+    .hero { position: relative; overflow: hidden; isolation: isolate; padding: 92px 0 115px; }
+    .hero::before { content: ""; position: absolute; width: 520px; height: 520px; right: -220px; top: -200px; border-radius: 50%; background: #e6f1eb; z-index: -1; }
+    .hero::after { content: ""; position: absolute; width: 260px; height: 260px; left: -170px; bottom: -180px; border-radius: 50%; background: #faebd7; z-index: -1; }
+    .hero-grid { display: grid; grid-template-columns: 1.02fr .98fr; align-items: center; gap: 56px; }
+    .hero-copy { position: relative; z-index: 2; animation: rise .7s ease both; }
+    .hero-copy .lead { margin-bottom: 30px; }
+    .hero-art-strip { display: grid; grid-template-columns: 1.15fr .85fr; gap: 12px; margin-top: 27px; max-width: 575px; }
+    .hero-chip { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: 1px solid rgba(29,107,96,.12); border-radius: 12px; background: rgba(255,255,255,.68); color: var(--ink-2); font-size: 11px; font-weight: 750; }
+    .hero-chip b { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 8px; color: var(--teal); background: var(--mint); font-size: 12px; }
+    .hero-bubbles { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+    .bubble { position: absolute; display: grid; place-items: center; border: 1px solid rgba(29,107,96,.16); border-radius: 50%; color: var(--teal); background: rgba(255,255,255,.64); box-shadow: 0 12px 35px rgba(23,51,58,.08); font-size: 15px; font-weight: 900; }
+    .bubble.one { top: 16%; left: 7%; width: 38px; height: 38px; animation: drift 5s ease-in-out infinite; }
+    .bubble.two { right: 3%; top: 24%; width: 27px; height: 27px; color: var(--coral); animation: floaty 6s ease-in-out 1s infinite; }
+    .bubble.three { left: 43%; bottom: 11%; width: 23px; height: 23px; color: var(--orange); animation: drift 4.5s ease-in-out 1.5s infinite; }
+    .bubble.four { right: 35%; bottom: 8%; width: 14px; height: 14px; background: var(--orange); opacity: .7; animation: floaty 5s ease-in-out .7s infinite; }
+    .dashboard-wrap { animation: rise .8s .08s ease both; }
+    .dashboard { animation: floaty 7s ease-in-out 1s infinite; }
+    .float-card { animation: floaty 5s ease-in-out infinite; }
+    .hero-illustration { position: relative; overflow: hidden; min-height: 155px; border-radius: 18px; background: #e5f3ec; }
+    .hero-illustration img { width: 100%; height: 100%; min-height: 155px; display: block; object-fit: cover; object-position: 50% 38%; }
+    .hero-illustration::after { content: "Illustration ScolaPilot"; position: absolute; left: 12px; bottom: 10px; padding: 5px 8px; border-radius: 999px; color: #fff; background: rgba(23,51,58,.72); font-size: 9px; font-weight: 800; }
+    .hero-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .hero-note { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; margin-top: 20px; }
+    .hero-note .avatars { display: flex; }
+    .avatar { width: 28px; height: 28px; display: grid; place-items: center; border: 2px solid var(--paper); margin-left: -7px; border-radius: 50%; font-size: 11px; font-weight: 800; color: white; }
+    .avatar:first-child { margin-left: 0; background: var(--coral); }
+    .avatar:nth-child(2) { background: var(--teal); }
+    .avatar:nth-child(3) { background: #718d8a; }
+
+    .dashboard-wrap { position: relative; padding: 18px 0 0 18px; }
+    .dashboard-wrap::before { content: ""; position: absolute; left: 0; top: 0; width: 77%; height: 92%; border-radius: var(--radius-lg); background: #e4f0ea; }
+    .dashboard { position: relative; overflow: hidden; background: #fff; border: 1px solid rgba(23,51,58,.1); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+    .dash-head { min-height: 68px; padding: 0 21px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #edf0ed; }
+    .dash-logo { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 850; }
+    .dash-logo i { width: 22px; height: 22px; border-radius: 7px 7px 7px 2px; background: var(--teal); display: inline-block; }
+    .dash-user { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+    .dash-user b { display: grid; place-items: center; width: 29px; height: 29px; border-radius: 50%; background: #f7d8bd; color: #8b5537; font-size: 11px; }
+    .dash-body { display: grid; grid-template-columns: 104px 1fr; min-height: 355px; }
+    .dash-side { padding: 18px 11px; border-right: 1px solid #edf0ed; background: #fbfcfa; }
+    .dash-side span { display: flex; align-items: center; gap: 8px; padding: 10px 8px; border-radius: 9px; color: #7b898a; font-size: 10px; margin-bottom: 5px; }
+    .dash-side span.active { background: #e4f2ed; color: var(--teal); font-weight: 800; }
+    .dash-content { padding: 21px; background: #fff; }
+    .dash-title { display: flex; align-items: end; justify-content: space-between; margin-bottom: 18px; }
+    .dash-title h3 { font-size: 18px; margin-bottom: 2px; letter-spacing: -.03em; }
+    .dash-title p { font-size: 10px; color: #8c9796; margin: 0; }
+    .dash-select { border: 1px solid #e5e9e5; border-radius: 7px; padding: 7px 9px; color: var(--muted); font-size: 10px; background: white; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+    .kpi { padding: 12px; border: 1px solid #edf0ed; border-radius: 12px; }
+    .kpi-label { display: flex; align-items: center; justify-content: space-between; color: #7d8988; font-size: 9px; margin-bottom: 6px; }
+    .kpi-label i { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 6px; background: #eaf5ef; color: var(--teal); font-style: normal; }
+    .kpi strong { font-size: 19px; letter-spacing: -.04em; }
+    .kpi small { display: block; color: var(--teal); font-size: 9px; margin-top: 4px; }
+    .dash-lower { display: grid; grid-template-columns: 1.2fr .8fr; gap: 10px; margin-top: 13px; }
+    .chart, .overdue { border: 1px solid #edf0ed; border-radius: 12px; padding: 13px; }
+    .mini-title { display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 800; margin-bottom: 13px; }
+    .mini-title em { color: var(--teal); font-size: 9px; font-style: normal; }
+    .bars { display: flex; align-items: end; gap: 8px; height: 94px; padding: 0 4px 17px; border-bottom: 1px solid #e9eeea; background: repeating-linear-gradient(to top, transparent 0, transparent 30px, #f2f5f2 31px); }
+    .bar { flex: 1; min-width: 7px; border-radius: 5px 5px 0 0; background: #bfe2d4; }
+    .bar:nth-child(1) { height: 44%; } .bar:nth-child(2) { height: 62%; } .bar:nth-child(3) { height: 53%; } .bar:nth-child(4) { height: 74%; background: #66b89f; } .bar:nth-child(5) { height: 82%; background: var(--teal); } .bar:nth-child(6) { height: 92%; background: var(--teal); }
+    .bar-labels { display: flex; justify-content: space-around; margin-top: 6px; color: #a0aaa8; font-size: 8px; }
+    .overdue-list { display: grid; gap: 10px; }
+    .overdue-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 9px; }
+    .student { display: flex; align-items: center; gap: 6px; color: #536667; }
+    .student i { width: 21px; height: 21px; display: grid; place-items: center; border-radius: 50%; background: #f9dfc9; color: #a06443; font-size: 8px; font-style: normal; font-weight: 800; }
+    .amount { color: var(--coral); font-weight: 850; }
+    .float-card { position: absolute; right: -25px; bottom: 11px; display: flex; align-items: center; gap: 11px; padding: 13px 16px; background: white; border: 1px solid #ecf0eb; border-radius: 15px; box-shadow: 0 18px 35px rgba(23,51,58,.14); }
+    .check { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--teal); }
+    .float-card span { display: block; color: var(--muted); font-size: 10px; }
+    .float-card strong { display: block; margin-top: 1px; font-size: 13px; }
+
+    .trust { padding: 22px 0 28px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .trust-inner { display: flex; align-items: center; justify-content: space-between; gap: 28px; }
+    .trust p { color: #8a9693; font-size: 12px; margin: 0; white-space: nowrap; }
+    .trust-items { display: flex; align-items: center; gap: 34px; color: #8c9996; font-size: 13px; font-weight: 850; }
+    .trust-items span { display: inline-flex; align-items: center; gap: 8px; }
+    .trust-items i { width: 20px; height: 20px; border-radius: 6px; background: #dce8e3; display: inline-block; }
+    .levels-section { padding: 64px 0 72px; background: #fff; }
+    .levels-grid { display: grid; grid-template-columns: .83fr 1.17fr; gap: 36px; align-items: center; }
+    .levels-copy h2 { font-size: clamp(31px, 4vw, 47px); margin: 16px 0 12px; }
+    .levels-copy p { max-width: 485px; color: var(--muted); font-size: 15px; line-height: 1.65; }
+    .level-groups { display: grid; gap: 13px; margin-top: 24px; }
+    .level-group { display: grid; grid-template-columns: 118px 1fr; align-items: center; gap: 14px; }
+    .level-group strong { color: var(--ink-2); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .level-pills { display: flex; flex-wrap: wrap; gap: 7px; }
+    .level-pill { display: inline-flex; align-items: center; min-height: 30px; padding: 0 10px; border: 1px solid #d8e7df; border-radius: 999px; color: var(--teal); background: #f1f8f4; font-size: 11px; font-weight: 850; }
+    .level-pill.secondary { border-color: #f1dbc0; color: #9a6832; background: #fff8ed; }
+    .level-pill.tertiary { border-color: #e7d9ec; color: #76548b; background: #fbf5ff; }
+    .levels-art { position: relative; overflow: hidden; padding: 13px; border: 1px solid #dcebe3; border-radius: 24px; background: #e7f3ed; box-shadow: 0 18px 42px rgba(23,51,58,.08); }
+    .levels-art img { display: block; width: 100%; height: 300px; object-fit: cover; object-position: 50% 42%; border-radius: 16px; }
+    .art-badge { position: absolute; right: 26px; bottom: 25px; display: flex; align-items: center; gap: 8px; padding: 11px 13px; border: 1px solid rgba(255,255,255,.7); border-radius: 12px; color: #fff; background: rgba(23,51,58,.86); box-shadow: 0 12px 25px rgba(23,51,58,.17); font-size: 11px; font-weight: 800; }
+    .art-badge b { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; color: var(--teal); background: #dcefe6; font-size: 12px; }
+
+    section { padding: 112px 0; }
+    .section-head { display: flex; align-items: end; justify-content: space-between; gap: 30px; margin-bottom: 47px; }
+    .section-head .lead { max-width: 420px; font-size: 16px; }
+    .section-head h2 { max-width: 620px; margin-bottom: 0; }
+    .section-head p { margin-bottom: 5px; }
+
+    .feature-section { background: var(--cream); }
+    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+    .feature-card { position: relative; min-height: 238px; padding: 24px; overflow: hidden; background: white; border: 1px solid #e5e7e1; border-radius: var(--radius-md); transition: transform .25s ease, box-shadow .25s ease; }
+    .feature-card:hover { transform: translateY(-5px); box-shadow: 0 18px 35px rgba(23,51,58,.08); }
+    .feature-card:nth-child(2), .feature-card:nth-child(5) { background: var(--teal); color: white; border-color: transparent; }
+    .feature-card:nth-child(2) p, .feature-card:nth-child(5) p { color: #c9dfd7; }
+    .feature-icon { width: 43px; height: 43px; display: grid; place-items: center; border-radius: 13px; margin-bottom: 28px; color: var(--teal); background: var(--mint); }
+    .feature-card:nth-child(2) .feature-icon, .feature-card:nth-child(5) .feature-icon { background: rgba(255,255,255,.16); color: #fff; }
+    .feature-icon svg { width: 21px; height: 21px; }
+    .feature-card p { color: var(--muted); font-size: 14px; line-height: 1.6; max-width: 270px; margin: 0; }
+    .feature-number { position: absolute; right: 20px; bottom: 12px; color: rgba(23,51,58,.08); font-size: 61px; line-height: 1; font-weight: 900; letter-spacing: -.08em; }
+    .feature-card:nth-child(2) .feature-number, .feature-card:nth-child(5) .feature-number { color: rgba(255,255,255,.1); }
+
+    .workflow { background: var(--paper); }
+    .workflow-grid { display: grid; grid-template-columns: .86fr 1.14fr; gap: 70px; align-items: center; }
+    .steps { display: grid; gap: 0; }
+    .step { position: relative; display: grid; grid-template-columns: 52px 1fr; gap: 18px; padding-bottom: 34px; }
+    .step:last-child { padding-bottom: 0; }
+    .step:not(:last-child)::after { content: ""; position: absolute; left: 24px; top: 52px; width: 1px; bottom: 0; background: #cbdad3; }
+    .step-no { position: relative; z-index: 1; width: 49px; height: 49px; display: grid; place-items: center; border: 1px solid #b9d7cb; border-radius: 50%; color: var(--teal); background: #e5f2ec; font-weight: 900; }
+    .step h3 { margin: 2px 0 6px; font-size: 18px; }
+    .step p { color: var(--muted); font-size: 14px; max-width: 390px; margin-bottom: 0; }
+    .proof-card { padding: 28px; color: white; background: var(--ink); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+    .proof-card .eyebrow { border-color: rgba(255,255,255,.2); color: #bde1d3; background: rgba(255,255,255,.08); }
+    .proof-card h3 { margin-top: 21px; font-size: 28px; line-height: 1.1; max-width: 355px; }
+    .proof-card p { color: #b4c8c4; font-size: 14px; max-width: 370px; }
+    .proof-stat { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 30px; }
+    .proof-stat div { padding: 15px; border: 1px solid rgba(255,255,255,.13); border-radius: 13px; background: rgba(255,255,255,.04); }
+    .proof-stat strong { display: block; font-size: 25px; letter-spacing: -.05em; }
+    .proof-stat span { display: block; margin-top: 4px; color: #abc0bc; font-size: 11px; }
+
+    .pricing { background: #f2f7f3; }
+    .pricing-top { display: flex; align-items: end; justify-content: space-between; gap: 25px; margin-bottom: 37px; }
+    .toggle { display: inline-flex; align-items: center; gap: 10px; padding: 5px; border: 1px solid #cfdcd5; border-radius: 999px; background: white; }
+    .toggle button { border: 0; padding: 10px 14px; border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .toggle button.active { background: var(--teal); color: white; }
+    .save { color: var(--teal); font-size: 11px; font-weight: 850; }
+    .price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; align-items: stretch; }
+    .price-card { position: relative; display: flex; flex-direction: column; padding: 29px 25px 25px; min-height: 440px; border: 1px solid #dce6df; border-radius: var(--radius-md); background: white; }
+    .price-card.recommended { border: 2px solid var(--teal); box-shadow: 0 18px 35px rgba(29,107,96,.12); transform: translateY(-10px); }
+    .popular { position: absolute; right: 19px; top: 19px; padding: 5px 8px; border-radius: 999px; color: #15584f; background: #d9eee5; font-size: 9px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+    .price-card h3 { font-size: 21px; margin-bottom: 10px; }
+    .price-desc { color: var(--muted); font-size: 13px; min-height: 42px; }
+    .price { margin: 20px 0 3px; font-size: 40px; font-weight: 900; letter-spacing: -.07em; }
+    .price small { color: var(--muted); font-size: 13px; letter-spacing: 0; font-weight: 600; }
+    .price-year { min-height: 20px; color: var(--teal); font-size: 11px; font-weight: 750; }
+    .price-card ul { display: grid; gap: 12px; list-style: none; padding: 22px 0 22px; margin: 18px 0 22px; border-top: 1px solid #edf0ed; color: var(--ink-2); font-size: 13px; }
+    .price-card li { display: flex; gap: 9px; align-items: flex-start; }
+    .price-card li::before { content: "✓"; width: 17px; height: 17px; flex: 0 0 17px; display: grid; place-items: center; border-radius: 50%; background: #e3f1ea; color: var(--teal); font-size: 10px; font-weight: 900; }
+    .price-card .btn { margin-top: auto; width: 100%; }
+    .pricing-note { margin-top: 25px; color: var(--muted); text-align: center; font-size: 12px; }
+
+    .security { background: var(--paper); }
+    .security-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+    .security-list { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-top: 30px; }
+    .security-item { padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: white; }
+    .security-item strong { display: block; margin-bottom: 5px; font-size: 14px; }
+    .security-item span { display: block; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .phone-card { position: relative; max-width: 370px; margin: 0 auto; padding: 14px; border: 1px solid #d6e4dc; border-radius: 30px; background: #e6f2ec; box-shadow: 0 30px 60px rgba(23,51,58,.1); }
+    .phone { overflow: hidden; min-height: 440px; border: 7px solid var(--ink); border-radius: 23px; background: white; }
+    .phone-top { display: flex; align-items: center; justify-content: space-between; padding: 17px 17px 14px; color: white; background: var(--teal); }
+    .phone-top strong { font-size: 13px; }
+    .phone-top span { font-size: 10px; opacity: .8; }
+    .phone-content { padding: 18px; }
+    .phone-welcome { margin-bottom: 19px; }
+    .phone-welcome small { color: var(--muted); font-size: 11px; }
+    .phone-welcome strong { display: block; margin-top: 3px; font-size: 22px; letter-spacing: -.05em; }
+    .phone-card { padding: 14px; margin-bottom: 10px; border: 1px solid #ecf0eb; border-radius: 14px; }
+    .phone-row { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+    .phone-row + .phone-row { margin-top: 12px; }
+    .phone-label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+    .dot { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 8px; color: var(--teal); background: var(--mint); font-size: 12px; }
+    .phone-row b { font-size: 12px; }
+    .progress { height: 7px; margin-top: 14px; overflow: hidden; border-radius: 999px; background: #e8eeea; }
+    .progress span { display: block; width: 73%; height: 100%; border-radius: inherit; background: var(--teal); }
+    .mobile-menu { display: none; }
+
+    .faq { background: var(--cream); }
+    .faq-grid { display: grid; grid-template-columns: .75fr 1.25fr; gap: 70px; }
+    .faq-list { display: grid; gap: 9px; }
+    details { padding: 0 19px; border: 1px solid #dce4de; border-radius: 13px; background: white; }
+    summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 0; list-style: none; cursor: pointer; font-size: 14px; font-weight: 800; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "+"; color: var(--teal); font-size: 22px; font-weight: 400; }
+    details[open] summary::after { content: "−"; }
+    details p { max-width: 600px; color: var(--muted); font-size: 13px; padding: 0 30px 20px 0; margin: 0; }
+
+    .demo { padding-bottom: 125px; background: var(--paper); }
+    .demo-box { display: grid; grid-template-columns: .9fr 1.1fr; gap: 58px; padding: 56px; overflow: hidden; border-radius: var(--radius-lg); background: var(--teal); color: white; }
+    .demo-box h2 { max-width: 440px; margin-top: 19px; }
+    .demo-box .lead { color: #c8dfd7; font-size: 15px; max-width: 420px; }
+    .demo-perks { display: grid; gap: 11px; margin-top: 26px; color: #e4f2ed; font-size: 13px; }
+    .demo-perks span { display: flex; align-items: center; gap: 9px; }
+    .demo-perks i { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; color: var(--teal); background: #d8eee5; font-size: 11px; font-style: normal; }
+    .demo-form { padding: 25px; border-radius: 20px; background: white; color: var(--ink); }
+    .demo-form h3 { font-size: 22px; margin-bottom: 5px; }
+    .demo-form > p { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { display: grid; gap: 6px; color: var(--ink-2); font-size: 11px; font-weight: 800; }
+    input, select, textarea { width: 100%; border: 1px solid #dce4de; border-radius: 9px; outline: none; color: var(--ink); background: #fbfcfa; padding: 11px 12px; font-size: 13px; transition: border .2s ease, box-shadow .2s ease; }
+    textarea { resize: vertical; min-height: 82px; }
+    input:focus, select:focus, textarea:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(29,107,96,.12); }
+    .form-full { grid-column: 1 / -1; }
+    .form-submit { width: 100%; margin-top: 15px; }
+    .form-success { display: none; margin-top: 12px; padding: 11px 13px; border-radius: 9px; color: #15584f; background: #e2f1ea; font-size: 12px; }
+    .form-success.show { display: block; }
+
+    footer { padding: 35px 0 28px; color: #b6c7c3; background: var(--ink); }
+    .footer-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 40px; padding-bottom: 32px; border-bottom: 1px solid rgba(255,255,255,.12); }
+    .footer-brand { color: white; }
+    .footer-copy { max-width: 260px; margin-top: 17px; color: #9fb5af; font-size: 13px; }
+    .footer-links { display: flex; gap: 66px; }
+    .footer-links div { display: grid; gap: 10px; }
+    .footer-links strong { color: white; font-size: 12px; }
+    .footer-links a { font-size: 12px; color: #a7bab5; }
+    .footer-links a:hover { color: white; }
+    .footer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 20px; font-size: 11px; }
+
+    @media (max-width: 900px) {
+      .hero-grid, .workflow-grid, .security-grid, .faq-grid, .demo-box, .levels-grid { grid-template-columns: 1fr; }
+      .hero { padding-top: 65px; }
+      .hero-copy { max-width: 700px; }
+      .dashboard-wrap { max-width: 650px; }
+      .workflow-grid, .security-grid, .faq-grid { gap: 45px; }
+      .demo-box { gap: 35px; padding: 38px; }
+      .price-grid { grid-template-columns: 1fr; max-width: 520px; margin: auto; }
+      .price-card.recommended { transform: none; }
+      .pricing-top { align-items: flex-start; flex-direction: column; }
+      .trust-inner { align-items: flex-start; flex-direction: column; }
+    }
+    @media (max-width: 720px) {
+      .container { width: min(100% - 34px, 600px); }
+      .topbar-right { display: none; }
+      .topbar-inner { justify-content: center; min-height: 32px; }
+      .nav { min-height: 70px; }
+      nav ul, .nav-actions { display: none; }
+      .menu-button { display: inline-grid; place-items: center; }
+      .mobile-menu { position: absolute; top: 70px; left: 0; right: 0; display: none; padding: 8px 17px 20px; background: rgba(251,250,246,.98); border-bottom: 1px solid var(--line); box-shadow: 0 15px 25px rgba(23,51,58,.06); }
+      .mobile-menu.open { display: grid; }
+      .mobile-menu a { padding: 13px 4px; border-bottom: 1px solid #e9eeea; font-size: 14px; font-weight: 750; }
+      .mobile-menu .btn { margin-top: 13px; }
+      h1 { font-size: clamp(45px, 14vw, 65px); }
+      h2 { font-size: 40px; }
+      .hero { padding: 54px 0 78px; }
+      .hero-actions { align-items: stretch; flex-direction: column; }
+      .hero-actions .btn { width: 100%; }
+      .dashboard-wrap { padding-left: 0; transform: scale(.94); transform-origin: top left; width: 106%; margin-bottom: -20px; }
+      .float-card { right: 5px; }
+      .dash-side { display: none; }
+      .dash-body { display: block; }
+      .dash-content { padding: 16px; }
+      .kpi-grid { gap: 5px; }
+      .kpi { padding: 9px; }
+      .kpi strong { font-size: 15px; }
+      .dash-lower { grid-template-columns: 1fr; }
+      .overdue { display: none; }
+      .trust-items { flex-wrap: wrap; gap: 15px; }
+      section { padding: 78px 0; }
+      .section-head { display: block; margin-bottom: 32px; }
+      .section-head .lead { margin-top: 15px; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .feature-card { min-height: 205px; }
+      .level-group { grid-template-columns: 1fr; gap: 7px; }
+      .levels-art img { height: 235px; }
+      .security-list { grid-template-columns: 1fr; }
+      .proof-stat { margin-top: 25px; }
+      .demo { padding-bottom: 80px; }
+      .demo-box { padding: 28px 20px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .form-full { grid-column: auto; }
+      .footer-top, .footer-bottom { display: block; }
+      .footer-links { gap: 35px; margin-top: 28px; flex-wrap: wrap; }
+      .footer-bottom span { display: block; margin-top: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="container topbar-inner">
+      <span><strong>Ouverture prochaine</strong> — pilotez votre école depuis votre téléphone</span>
+      <div class="topbar-right"><span>🇧🇫 Burkina Faso</span><span>Français</span></div>
+    </div>
+  </div>
+
+  <header>
+    <div class="container nav">
+      <a class="brand" href="#accueil" aria-label="ScolaPilot accueil"><img class="brand-logo" src="assets/logo.svg" alt="ScolaPilot" /></a>
+      <nav aria-label="Navigation principale">
+        <ul>
+          <li><a href="#fonctionnalites">Fonctionnalités</a></li>
+          <li><a href="#methode">Comment ça marche</a></li>
+          <li><a href="#tarifs">Tarifs</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+      <div class="nav-actions"><a class="btn btn-ghost" href="dashboard.html">Démo dashboard</a><a class="btn btn-primary" href="app.html">Espace connecté <span>↗</span></a></div>
+      <button class="menu-button" id="menuButton" aria-label="Ouvrir le menu" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+    <div class="mobile-menu" id="mobileMenu">
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#methode">Comment ça marche</a>
+      <a href="#tarifs">Tarifs</a>
+      <a href="#faq">FAQ</a>
+      <a href="dashboard.html">Démo dashboard</a>
+      <a href="app.html">Espace connecté</a>
+      <a class="btn btn-primary" href="#demo">Demander une démo <span>↗</span></a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="accueil">
+      <div class="hero-bubbles" aria-hidden="true"><span class="bubble one">＋</span><span class="bubble two">✦</span><span class="bubble three">•</span><span class="bubble four"></span></div>
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow">La gestion scolaire, enfin simple</span>
+          <h1>Moins de cahiers.<br /><span class="accent">Plus de contrôle.</span></h1>
+          <p class="lead">ScolaPilot aide les écoles privées à suivre les paiements, réduire les impayés et garder les parents informés — depuis un ordinateur ou un simple téléphone.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#demo">Commencer avec une démo <span>↗</span></a>
+            <a class="btn btn-ghost" href="#fonctionnalites">Découvrir la plateforme <span>↓</span></a>
+          </div>
+          <div class="hero-note">
+            <div class="avatars" aria-hidden="true"><span class="avatar">AD</span><span class="avatar">MK</span><span class="avatar">SA</span></div>
+            <span>Conçu pour les réalités des écoles d’Afrique de l’Ouest.</span>
+          </div>
+          <div class="hero-art-strip">
+            <div class="hero-illustration"><img src="assets/photos/teacher-classroom.jpg" alt="Enseignante africaine en classe avec ses élèves" /></div>
+            <div style="display:grid;gap:10px"><div class="hero-chip"><b>✓</b><span>Prêt pour chaque niveau</span></div><div class="hero-chip"><b>↗</b><span>Suivi des frais en FCFA</span></div><div class="hero-chip"><b>◷</b><span>Accessible sur mobile</span></div></div>
+          </div>
+        </div>
+        <div class="dashboard-wrap" aria-label="Aperçu du tableau de bord ScolaPilot">
+          <div class="dashboard">
+            <div class="dash-head"><div class="dash-logo"><i></i> ScolaPilot</div><div class="dash-user">Bonjour, Directeur <b>OD</b></div></div>
+            <div class="dash-body">
+              <aside class="dash-side"><span class="active">◈ Vue générale</span><span>♙ Élèves</span><span>▣ Paiements</span><span>⌁ Notes</span><span>◷ Présences</span><span>⚙ Paramètres</span></aside>
+              <div class="dash-content">
+                <div class="dash-title"><div><h3>Bonjour, Directeur 👋</h3><p>Voici ce qui se passe dans votre école.</p></div><span class="dash-select">2025 — 2026⌄</span></div>
+                <div class="kpi-grid">
+                  <div class="kpi"><div class="kpi-label">Élèves actifs <i>♙</i></div><strong>482</strong><small>+12 ce mois</small></div>
+                  <div class="kpi"><div class="kpi-label">Recouvrement <i>↗</i></div><strong>87%</strong><small>+8,4% vs mois passé</small></div>
+                  <div class="kpi"><div class="kpi-label">Impayés <i>!</i></div><strong>1,2M</strong><small style="color:var(--coral)">24 familles à relancer</small></div>
+                </div>
+                <div class="dash-lower">
+                  <div class="chart"><div class="mini-title">Paiements encaissés <em>+18,2%</em></div><div class="bars"><i class="bar"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i></div><div class="bar-labels"><span>Jan</span><span>Fév</span><span>Mar</span><span>Avr</span><span>Mai</span><span>Juin</span></div></div>
+                  <div class="overdue"><div class="mini-title">À relancer <em>Voir tout →</em></div><div class="overdue-list"><div class="overdue-item"><span class="student"><i>YA</i> Y. Aïcha</span><span class="amount">75k</span></div><div class="overdue-item"><span class="student"><i>KB</i> K. Boubacar</span><span class="amount">50k</span></div><div class="overdue-item"><span class="student"><i>OS</i> O. Salimata</span><span class="amount">25k</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="float-card"><span class="check">✓</span><div><span>Paiement reçu</span><strong>+ 75 000 FCFA · Aïcha Y.</strong></div></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="trust"><div class="container trust-inner"><p>Un outil pensé pour une école qui avance</p><div class="trust-items"><span><i></i>Simple</span><span><i></i>Mobile-first</span><span><i></i>En FCFA</span><span><i></i>Support local</span></div></div></div>
+
+    <section class="levels-section" id="niveaux">
+      <div class="container levels-grid">
+        <div class="levels-copy"><span class="eyebrow">Du préscolaire au lycée</span><h2>Une structure adaptée à <span class="accent">chaque niveau.</span></h2><p>Configurez votre établissement sans forcer vos classes dans un modèle étranger. ScolaPilot couvre le préscolaire, le primaire, le postprimaire et le secondaire burkinabè.</p><div class="level-groups"><div class="level-group"><strong>Préscolaire</strong><div class="level-pills"><span class="level-pill">Petite section</span><span class="level-pill">Moyenne section</span><span class="level-pill">Grande section</span></div></div><div class="level-group"><strong>Primaire</strong><div class="level-pills"><span class="level-pill">CP1</span><span class="level-pill">CP2</span><span class="level-pill">CE1</span><span class="level-pill">CE2</span><span class="level-pill">CM1</span><span class="level-pill">CM2</span></div></div><div class="level-group"><strong>Secondaire</strong><div class="level-pills"><span class="level-pill secondary">6e</span><span class="level-pill secondary">5e</span><span class="level-pill secondary">4e</span><span class="level-pill secondary">3e</span><span class="level-pill tertiary">2nde</span><span class="level-pill tertiary">1ère</span><span class="level-pill tertiary">Tle</span></div></div></div></div>
+        <div class="levels-art"><img src="assets/photos/teacher-desk.jpg" alt="Enseignante africaine préparant ses cours" /><div class="art-badge"><b>✓</b> CP1 → Tle, sans erreur de niveau</div></div>
+      </div>
+    </section>
+
+    <section class="feature-section" id="fonctionnalites">
+      <div class="container">
+        <div class="section-head"><div><span class="eyebrow">Tout au même endroit</span><h2>Le quotidien de votre école, <span class="accent">sans la paperasse.</span></h2></div><p class="lead">Un espace clair pour la direction, le secrétariat, les enseignants et les parents.</p></div>
+        <div class="feature-grid">
+          <article class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3.1 2.4-4.7 5.5-4.7S14 15.9 14.5 19M17 11h4M19 9v4"/></svg></div><h3>Élèves & familles</h3><p>Dossiers complets, inscriptions, classes et contacts parents, toujours accessibles.</p><span class="feature-number">01</span></article>
+          <article class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M7 9h10M7 13h6M16 17H8"/></svg></div><h3>Paiements & reçus</h3><p>Échéanciers, paiements partiels, reçus PDF et solde restant par élève.</p><span class="feature-number">02</span></article>
+          <article class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16"/><path d="m7 15 3-4 3 2 4-6"/></svg></div><h3>Impayés maîtrisés</h3><p>Voyez qui doit quoi, relancez au bon moment et pilotez le recouvrement.</p><span class="feature-number">03</span></article>
+          <article class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div><h3>Notes & bulletins</h3><p>Moyennes, classements et bulletins professionnels générés en quelques clics.</p><span class="feature-number">04</span></article>
+          <article class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.2 8.2 0 0 1-4-.9L4 19l1.2-3.3A7.4 7.4 0 1 1 20 11.5Z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></svg></div><h3>Parents informés</h3><p>Absences, paiements, réunions : envoyez la bonne information au bon moment.</p><span class="feature-number">05</span></article>
+          <article class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 6v5c0 5-3.3 8.2-8 10-4.7-1.8-8-5-8-10V6l8-3Z"/><path d="m8.5 12 2.3 2.3 4.8-5"/></svg></div><h3>Sécurisé & sauvegardé</h3><p>Des accès par rôle, des historiques et des sauvegardes pour travailler sereinement.</p><span class="feature-number">06</span></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="workflow" id="methode">
+      <div class="container workflow-grid">
+        <div><span class="eyebrow">Prêt rapidement</span><h2>Du cahier au <span class="accent">pilotage.</span></h2><p class="lead">Pas besoin de serveur, ni de formation interminable. On vous accompagne pour démarrer sans perturber votre rentrée.</p><div class="steps"><div class="step"><div class="step-no">01</div><div><h3>Créez votre espace</h3><p>Configurez l’école, les classes, les frais et les rôles de votre équipe.</p></div></div><div class="step"><div class="step-no">02</div><div><h3>Importez vos données</h3><p>Importez votre liste d’élèves depuis Excel ou ajoutez-les progressivement.</p></div></div><div class="step"><div class="step-no">03</div><div><h3>Pilotez au quotidien</h3><p>Encaissez, faites l’appel, saisissez les notes et partagez les documents.</p></div></div></div></div>
+        <div class="proof-card"><span class="eyebrow">Votre vue en un coup d’œil</span><h3>Les décisions importantes commencent par des chiffres fiables.</h3><p>Suivez les encaissements, les absences et la performance de vos classes depuis un tableau de bord simple.</p><div class="proof-stat"><div><strong>87%</strong><span>taux de recouvrement</span></div><div><strong>482</strong><span>élèves actifs</span></div><div><strong>24/7</strong><span>accès sécurisé</span></div><div><strong>1 jour</strong><span>pour démarrer</span></div></div></div>
+      </div>
+    </section>
+
+    <section class="pricing" id="tarifs">
+      <div class="container">
+        <div class="pricing-top"><div><span class="eyebrow">Simple et transparent</span><h2>Un prix adapté à votre école.</h2><p class="lead">Commencez petit, évoluez quand votre établissement grandit. Sans frais cachés.</p></div><div><div class="toggle" role="group" aria-label="Choisir la périodicité"><button class="active" data-period="month">Mensuel</button><button data-period="year">Annuel</button></div><div class="save">2 mois offerts avec l’annuel</div></div></div>
+        <div class="price-grid">
+          <article class="price-card"><h3>Essentielle</h3><p class="price-desc">Pour démarrer sans changer toutes vos habitudes.</p><div class="price"><span class="price-value" data-month="15 000" data-year="150 000">15 000</span> <small class="price-suffix">FCFA / mois</small></div><div class="price-year" data-month="" data-year="Équivalent à 12 500 FCFA / mois">&nbsp;</div><ul><li>Élèves, parents & classes</li><li>Inscriptions et paiements</li><li>Reçus PDF</li><li>Liste des impayés</li><li>3 utilisateurs</li></ul><a class="btn btn-ghost" href="#demo">Choisir Essentielle</a></article>
+          <article class="price-card recommended"><span class="popular">La plus choisie</span><h3>Standard</h3><p class="price-desc">Pour une gestion complète de votre école.</p><div class="price"><span class="price-value" data-month="30 000" data-year="300 000">30 000</span> <small class="price-suffix">FCFA / mois</small></div><div class="price-year" data-month="" data-year="Équivalent à 25 000 FCFA / mois">&nbsp;</div><ul><li>Tout le forfait Essentielle</li><li>Notes & bulletins PDF</li><li>Présences & emplois du temps</li><li>Relances aux parents</li><li>Import Excel & rapports</li><li>10 utilisateurs</li></ul><a class="btn btn-primary" href="#demo">Choisir Standard <span>↗</span></a></article>
+          <article class="price-card"><h3>Premium</h3><p class="price-desc">Pour les écoles structurées ou multi-sections.</p><div class="price"><span class="price-value" data-month="60 000" data-year="600 000">60 000</span> <small class="price-suffix">FCFA / mois</small></div><div class="price-year" data-month="" data-year="Équivalent à 50 000 FCFA / mois">&nbsp;</div><ul><li>Tout le forfait Standard</li><li>Utilisateurs illimités</li><li>Rapports avancés</li><li>Portail parent</li><li>Plusieurs campus</li><li>Accompagnement prioritaire</li></ul><a class="btn btn-ghost" href="#demo">Parler à l’équipe</a></article>
+        </div>
+        <p class="pricing-note">Essai gratuit de 30 jours · Installation et migration Excel offertes pour les premières écoles pilotes · Les frais SMS, WhatsApp et transactionnels sont facturés séparément.</p>
+      </div>
+    </section>
+
+    <section class="security">
+      <div class="container security-grid"><div><span class="eyebrow">Pensé pour le terrain</span><h2>Simple sur mobile. Solide pour la direction.</h2><p class="lead">Une interface claire, des accès maîtrisés et les informations essentielles à portée de main — même quand la connexion n’est pas parfaite.</p><div class="security-list"><div class="security-item"><strong>📱 Mobile-first</strong><span>Travaillez depuis un smartphone, une tablette ou un ordinateur.</span></div><div class="security-item"><strong>🔐 Accès par rôle</strong><span>Chaque membre de l’équipe voit uniquement ce qui le concerne.</span></div><div class="security-item"><strong>📊 Données utiles</strong><span>Des tableaux de bord qui parlent au directeur et au comptable.</span></div><div class="security-item"><strong>💾 Sauvegardes</strong><span>Votre historique reste disponible et exportable.</span></div></div></div><div class="phone-card"><div class="phone"><div class="phone-top"><div><strong>ScolaPilot</strong><span> · Tableau de bord</span></div><span>⋯</span></div><div class="phone-content"><div class="phone-welcome"><small>Bonjour, Directeur</small><strong>Votre école aujourd’hui</strong></div><div class="phone-card"><div class="phone-row"><span class="phone-label"><i class="dot">↗</i>Recouvrement</span><b>87%</b></div><div class="progress"><span></span></div></div><div class="phone-card"><div class="phone-row"><span class="phone-label"><i class="dot">♙</i>Présences</span><b>96%</b></div><div class="progress"><span style="width:96%;background:#73b79f"></span></div></div><div class="phone-card"><div class="phone-row"><span class="phone-label"><i class="dot">!</i>À relancer</span><b style="color:var(--coral)">24 familles</b></div><div class="phone-row"><span class="phone-label">Dernière mise à jour</span><span style="color:var(--muted);font-size:10px">à l’instant</span></div></div></div></div></div></div>
+    </section>
+
+    <section class="faq" id="faq"><div class="container faq-grid"><div><span class="eyebrow">Questions fréquentes</span><h2>Tout savoir avant de commencer.</h2><p class="lead">Vous avez une question sur le démarrage, les données ou les tarifs ?</p><a class="btn btn-primary" href="#demo">Parler à l’équipe <span>↗</span></a></div><div class="faq-list"><details open><summary>À qui s’adresse ScolaPilot ?</summary><p>ScolaPilot est conçu pour les écoles privées, de la maternelle au lycée, qui souhaitent centraliser leurs élèves, leurs paiements, leurs notes et leur communication avec les parents.</p></details><details><summary>Faut-il installer un logiciel ?</summary><p>Non. ScolaPilot est accessible dans un navigateur depuis un ordinateur, une tablette ou un téléphone. Vous n’avez pas besoin d’acheter un serveur.</p></details><details><summary>Peut-on importer nos élèves depuis Excel ?</summary><p>Oui. L’import Excel est prévu pour vous permettre de démarrer rapidement sans ressaisir toute votre base d’élèves.</p></details><details><summary>Les parents doivent-ils créer un compte ?</summary><p>Pour les premières fonctions de relance et de reçu, non. Nous pouvons envoyer les informations par SMS ou WhatsApp. Le portail parent sera disponible dans l’offre Premium.</p></details><details><summary>Les frais de messages sont-ils inclus ?</summary><p>L’abonnement couvre la plateforme. Les frais variables de SMS, de WhatsApp Business API et de transaction mobile money seront affichés séparément pour rester transparents.</p></details><details><summary>Comment fonctionne l’essai gratuit ?</summary><p>Vous disposez de 30 jours pour tester la plateforme avec votre équipe. Les premières écoles pilotes bénéficient aussi d’un accompagnement de configuration.</p></details></div></div></section>
+
+    <section class="demo" id="demo"><div class="container"><div class="demo-box"><div><span class="eyebrow">Votre prochaine rentrée commence ici</span><h2>Voyons ensemble ce que ScolaPilot peut simplifier.</h2><p class="lead">Demandez une démonstration gratuite. Nous vous montrerons comment suivre les paiements, les impayés et les activités de votre école.</p><div class="demo-perks"><span><i>✓</i> Démo personnalisée de 20 minutes</span><span><i>✓</i> Conseils pour importer vos données</span><span><i>✓</i> 30 jours d’essai sans engagement</span></div></div><form class="demo-form" id="demoForm"><h3>Demander une démo</h3><p>Réponse rapide par téléphone ou WhatsApp.</p><div class="form-grid"><label>Nom complet<input required type="text" name="name" placeholder="Ex. Aïssata Ouédraogo" /></label><label>Nom de l’école<input required type="text" name="school" placeholder="Ex. Groupe scolaire ..." /></label><label>WhatsApp / téléphone<input required type="tel" name="phone" placeholder="+226 70 00 00 00" /></label><label>Nombre d’élèves<select name="students"><option>Moins de 200</option><option>200 à 500</option><option>Plus de 500</option></select></label><label class="form-full">Votre besoin principal<textarea name="message" placeholder="Ex. Nous voulons mieux suivre les impayés..."></textarea></label></div><button class="btn btn-primary form-submit" type="submit">Envoyer ma demande <span>↗</span></button><div class="form-success" id="formSuccess">Merci ! Votre demande est bien enregistrée dans cette démo. Nous vous recontacterons rapidement.</div></form></div></div></section>
+  </main>
+
+  <footer><div class="container"><div class="footer-top"><div><a class="brand footer-brand" href="#accueil"><img class="brand-logo" src="assets/logo-light.svg" alt="ScolaPilot" /></a><p class="footer-copy">La gestion scolaire simple, pensée au Burkina Faso pour les écoles d’Afrique de l’Ouest.</p></div><div class="footer-links"><div><strong>Produit</strong><a href="#fonctionnalites">Fonctionnalités</a><a href="#tarifs">Tarifs</a><a href="#faq">FAQ</a></div><div><strong>Commencer</strong><a href="#demo">Demander une démo</a><a href="#methode">Comment ça marche</a><a href="#demo">Nous contacter</a></div><div><strong>Ressources</strong><a href="#faq">Confidentialité</a><a href="#faq">Conditions</a><a href="#accueil">Retour en haut ↑</a></div></div></div><div class="footer-bottom"><span>© 2026 ScolaPilot. Tous droits réservés.</span><span>Fait avec soin pour les équipes éducatives.</span></div></div></footer>
+
+  <script>
+    const menuButton = document.getElementById('menuButton');
+    const mobileMenu = document.getElementById('mobileMenu');
+    menuButton.addEventListener('click', () => {
+      const open = mobileMenu.classList.toggle('open');
+      menuButton.setAttribute('aria-expanded', String(open));
+    });
+    mobileMenu.querySelectorAll('a').forEach(link => link.addEventListener('click', () => {
+      mobileMenu.classList.remove('open');
+      menuButton.setAttribute('aria-expanded', 'false');
+    }));
+
+    const periodButtons = document.querySelectorAll('[data-period]');
+    const priceValues = document.querySelectorAll('.price-value');
+    const priceSuffixes = document.querySelectorAll('.price-suffix');
+    const priceYears = document.querySelectorAll('.price-year');
+    periodButtons.forEach(button => button.addEventListener('click', () => {
+      const period = button.dataset.period;
+      periodButtons.forEach(item => item.classList.toggle('active', item === button));
+      priceValues.forEach(item => item.textContent = item.dataset[period]);
+      priceSuffixes.forEach(item => item.textContent = period === 'month' ? 'FCFA / mois' : 'FCFA / an');
+      priceYears.forEach(item => item.textContent = item.dataset[period] || '\u00a0');
+    }));
+
+    const demoForm = document.getElementById('demoForm');
+    const formSuccess = document.getElementById('formSuccess');
+    demoForm.addEventListener('submit', event => {
+      event.preventDefault();
+      formSuccess.classList.add('show');
+      demoForm.querySelector('button').textContent = 'Demande envoyée ✓';
+      demoForm.reset();
+    });
+  </script>
+</body>
+</html>

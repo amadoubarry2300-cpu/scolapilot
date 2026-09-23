@@ -1,0 +1,15 @@
+node_modules/
+.npm/
+.next/
+out/
+dist/
+.env
+.env.local
+.env.*.local
+.vercel/
+.DS_Store
+image-search/
+uploads/
+.config/
+.gitconfig
+scolapilot-source.zip
