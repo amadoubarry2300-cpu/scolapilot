@@ -15,3 +15,5 @@ uploads/
 scolapilot-source.zip
 
 .local/
+
+.cache/
