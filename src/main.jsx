@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import './styles.css'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || import.meta.env.supabaseurl
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.anonkey || import.meta.env.Apikey
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.anonkey || import.meta.env.Apikey || import.meta.env['Clé API'] || import.meta.env['clé anonyme'] || import.meta.env['âne anonyme']
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null
 
 const levelGroups = [

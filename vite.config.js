@@ -8,7 +8,7 @@ const root = dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   // Les noms personnalisés sont exposés uniquement parce qu’ils contiennent
   // des valeurs publiques destinées au navigateur.
-  envPrefix: ['VITE_', 'supabaseurl', 'anonkey', 'Apikey'],
+  envPrefix: ['VITE_', 'supabaseurl', 'anonkey', 'Apikey', 'Clé API', 'clé anonyme', 'âne anonyme'],
   plugins: [react()],
   server: {
     host: '0.0.0.0',
