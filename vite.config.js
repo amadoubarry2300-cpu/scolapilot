@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url'
 const root = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  // Les noms personnalisés sont exposés uniquement parce qu’ils contiennent
+  // des valeurs publiques destinées au navigateur.
+  envPrefix: ['VITE_', 'supabaseurl', 'anonkey', 'Apikey'],
   plugins: [react()],
   server: {
     host: '0.0.0.0',
