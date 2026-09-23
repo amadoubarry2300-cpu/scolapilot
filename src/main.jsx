@@ -29,6 +29,7 @@ function App() {
   const [levels, setLevels] = useState([])
   const [classes, setClasses] = useState([])
   const [students, setStudents] = useState([])
+  const [guardians, setGuardians] = useState([])
   const [payments, setPayments] = useState([])
   const [fees, setFees] = useState([])
   const [activeView, setActiveView] = useState('overview')
@@ -38,6 +39,7 @@ function App() {
   const [classForm, setClassForm] = useState({ name: '', levelId: '' })
   const [paymentForm, setPaymentForm] = useState({ studentId: '', amount: '', method: 'cash', receiptNumber: '', note: '' })
   const [feeForm, setFeeForm] = useState({ studentId: '', label: 'Scolarité — tranche 1', amount: '', dueDate: '', discount: '' })
+  const [guardianForm, setGuardianForm] = useState({ fullName: '', phone: '', whatsapp: '', email: '', relationship: 'Parent', studentId: '' })
   const [studentSearch, setStudentSearch] = useState('')
   const [modal, setModal] = useState(null)
 
@@ -98,20 +100,22 @@ function App() {
 
   async function loadSchoolData(activeSchool = school) {
     if (!activeSchool) return
-    const [{ data: nextLevels, error: levelError }, { data: nextClasses, error: classError }, { data: nextStudents, error: studentError }, { data: nextPayments, error: paymentError }, { data: nextFees, error: feeError }] = await Promise.all([
+    const [{ data: nextLevels, error: levelError }, { data: nextClasses, error: classError }, { data: nextStudents, error: studentError }, { data: nextGuardians, error: guardianError }, { data: nextPayments, error: paymentError }, { data: nextFees, error: feeError }] = await Promise.all([
       supabase.from('levels').select('*').eq('school_id', activeSchool.id).order('sort_order'),
       supabase.from('classes').select('id, name, section, level_id, academic_year_id').eq('school_id', activeSchool.id).order('name'),
       supabase.from('students').select('*').eq('school_id', activeSchool.id).order('created_at', { ascending: false }),
+      supabase.from('guardians').select('*').eq('school_id', activeSchool.id).order('created_at', { ascending: false }),
       supabase.from('payments').select('*').eq('school_id', activeSchool.id).order('paid_at', { ascending: false }),
       supabase.from('fee_assignments').select('*').eq('school_id', activeSchool.id).order('due_date'),
     ])
-    if (levelError || classError || studentError || paymentError || feeError) {
-      notify(levelError?.message || classError?.message || studentError?.message || paymentError?.message || feeError?.message)
+    if (levelError || classError || studentError || guardianError || paymentError || feeError) {
+      notify(levelError?.message || classError?.message || studentError?.message || guardianError?.message || paymentError?.message || feeError?.message)
       return
     }
     setLevels(nextLevels || [])
     setClasses(nextClasses || [])
     setStudents(nextStudents || [])
+    setGuardians(nextGuardians || [])
     setPayments(nextPayments || [])
     setFees(nextFees || [])
     setPaymentForm(form => ({ ...form, studentId: form.studentId || nextStudents?.[0]?.id || '', receiptNumber: form.receiptNumber || `SP-${String((nextPayments?.length || 0) + 1).padStart(4, '0')}` }))
@@ -247,6 +251,27 @@ function App() {
     notify('Frais scolaires assignés avec succès.')
   }
 
+  async function addGuardian(event) {
+    event.preventDefault()
+    if (!guardianForm.fullName.trim() || !guardianForm.phone.trim()) return notify('Le nom et le téléphone du parent sont obligatoires.')
+    const { data: guardian, error } = await supabase.from('guardians').insert({
+      school_id: school.id,
+      full_name: guardianForm.fullName.trim(),
+      phone: guardianForm.phone.trim(),
+      whatsapp: guardianForm.whatsapp.trim() || null,
+      email: guardianForm.email.trim() || null,
+    }).select().single()
+    if (error) return notify(error.message)
+    if (guardianForm.studentId) {
+      const { error: linkError } = await supabase.from('student_guardians').insert({ student_id: guardianForm.studentId, guardian_id: guardian.id, relationship: guardianForm.relationship, is_primary: true })
+      if (linkError) return notify(`Parent ajouté, mais liaison élève impossible : ${linkError.message}`)
+    }
+    setGuardianForm({ fullName: '', phone: '', whatsapp: '', email: '', relationship: 'Parent', studentId: students[0]?.id || '' })
+    setModal(null)
+    await loadSchoolData()
+    notify('Parent ajouté avec succès.')
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
     setActiveView('overview')
@@ -264,7 +289,7 @@ function App() {
   if (!school) return <Onboarding user={session.user} form={onboarding} setForm={setOnboarding} message={authMessage} onSubmit={createSchool} loading={workspaceLoading} signOut={signOut} />
 
   const activeLevelCount = levels.length
-  const currentView = activeView === 'overview' ? <Overview school={school} students={students} classes={classes} levels={levels} payments={payments} onAddStudent={() => setModal('student')} onAddClass={() => setModal('class')} onAddPayment={() => setModal('payment')} /> : activeView === 'students' ? <Students students={filteredStudents} total={students.length} search={studentSearch} setSearch={setStudentSearch} onAdd={() => setModal('student')} classes={classes} /> : activeView === 'classes' ? <Classes levels={levels} classes={classes} onAdd={() => setModal('class')} /> : activeView === 'payments' ? <Payments payments={payments} students={students} onAdd={() => setModal('payment')} /> : activeView === 'fees' ? <Fees fees={fees} payments={payments} students={students} onAdd={() => setModal('fee')} /> : <Settings school={school} levels={levels} classes={classes} />
+  const currentView = activeView === 'overview' ? <Overview school={school} students={students} classes={classes} levels={levels} payments={payments} onAddStudent={() => setModal('student')} onAddClass={() => setModal('class')} onAddPayment={() => setModal('payment')} /> : activeView === 'students' ? <Students students={filteredStudents} total={students.length} search={studentSearch} setSearch={setStudentSearch} onAdd={() => setModal('student')} classes={classes} /> : activeView === 'classes' ? <Classes levels={levels} classes={classes} onAdd={() => setModal('class')} /> : activeView === 'payments' ? <Payments payments={payments} students={students} onAdd={() => setModal('payment')} /> : activeView === 'fees' ? <Fees fees={fees} payments={payments} students={students} onAdd={() => setModal('fee')} /> : activeView === 'guardians' ? <Guardians guardians={guardians} students={students} onAdd={() => setModal('guardian')} /> : <Settings school={school} levels={levels} classes={classes} />
 
   return <div className="cloud-app">
     <aside className="cloud-sidebar">
@@ -277,16 +302,18 @@ function App() {
         <NavButton active={activeView === 'classes'} icon="▦" label="Niveaux & classes" onClick={() => setActiveView('classes')} count={activeLevelCount} />
         <NavButton active={activeView === 'payments'} icon="▣" label="Paiements" onClick={() => setActiveView('payments')} count={payments.length} />
         <NavButton active={activeView === 'fees'} icon="◷" label="Frais & impayés" onClick={() => setActiveView('fees')} count={fees.length} />
+        <NavButton active={activeView === 'guardians'} icon="♧" label="Parents" onClick={() => setActiveView('guardians')} count={guardians.length} />
         <NavButton active={activeView === 'settings'} icon="⚙" label="Paramètres" onClick={() => setActiveView('settings')} />
       </div>
       <div className="cloud-sidebar-bottom"><div className="cloud-help"><strong>Besoin d’aide ?</strong><p>Votre espace est sécurisé par Supabase.</p><a href="index.html#demo">Contacter l’équipe →</a></div><button className="cloud-user" onClick={signOut}><span className="user-avatar">{initials(session.user.user_metadata?.full_name || session.user.email)}</span><span><b>{session.user.user_metadata?.full_name || session.user.email}</b><small>Se déconnecter</small></span><i>↗</i></button></div>
     </aside>
     <main className="cloud-main">
-      <header className="cloud-topbar"><div><span className="crumb">ScolaPilot <b>›</b></span><strong>{activeView === 'overview' ? 'Vue d’ensemble' : activeView === 'students' ? 'Élèves' : activeView === 'classes' ? 'Niveaux & classes' : activeView === 'payments' ? 'Paiements' : activeView === 'fees' ? 'Frais & impayés' : 'Paramètres'}</strong></div><div className="top-actions"><span className="live"><i></i> Données en direct</span><span className="top-user">{initials(session.user.user_metadata?.full_name || session.user.email)}</span></div></header>
+      <header className="cloud-topbar"><div><span className="crumb">ScolaPilot <b>›</b></span><strong>{activeView === 'overview' ? 'Vue d’ensemble' : activeView === 'students' ? 'Élèves' : activeView === 'classes' ? 'Niveaux & classes' : activeView === 'payments' ? 'Paiements' : activeView === 'fees' ? 'Frais & impayés' : activeView === 'guardians' ? 'Parents & tuteurs' : 'Paramètres'}</strong></div><div className="top-actions"><span className="live"><i></i> Données en direct</span><span className="top-user">{initials(session.user.user_metadata?.full_name || session.user.email)}</span></div></header>
       <div className="cloud-content">{currentView}</div>
     </main>
     {modal === 'student' && <Modal title="Ajouter un élève" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addStudent}><div className="form-grid"><Field label="Prénom"><input required value={studentForm.firstName} onChange={e => setStudentForm({ ...studentForm, firstName: e.target.value })} placeholder="Ex. Aïcha" /></Field><Field label="Nom"><input required value={studentForm.lastName} onChange={e => setStudentForm({ ...studentForm, lastName: e.target.value })} placeholder="Ex. Ouédraogo" /></Field><Field label="Matricule"><input required value={studentForm.studentNumber} onChange={e => setStudentForm({ ...studentForm, studentNumber: e.target.value })} placeholder="Ex. SP-2026-0001" /></Field><Field label="Classe"><select value={studentForm.classId} onChange={e => setStudentForm({ ...studentForm, classId: e.target.value })}><option value="">À affecter plus tard</option>{classes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field></div><ModalFooter onClose={() => setModal(null)} submit="Ajouter l’élève" /></form></Modal>}
     {modal === 'payment' && <Modal title="Enregistrer un paiement" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addPayment}><div className="form-grid"><Field label="Élève"><select required value={paymentForm.studentId} onChange={e => setPaymentForm({ ...paymentForm, studentId: e.target.value })}><option value="">Choisir un élève</option>{students.map(item => <option key={item.id} value={item.id}>{item.first_name} {item.last_name}</option>)}</select></Field><Field label="Montant (FCFA)"><input required type="number" min="1" value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })} placeholder="75000" /></Field><Field label="Mode de paiement"><select value={paymentForm.method} onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}><option value="cash">Espèces</option><option value="orange_money">Orange Money</option><option value="moov_money">Moov Money</option><option value="telecel_money">Telecel Money</option><option value="bank_transfer">Virement</option><option value="cheque">Chèque</option></select></Field><Field label="N° de reçu"><input required value={paymentForm.receiptNumber} onChange={e => setPaymentForm({ ...paymentForm, receiptNumber: e.target.value })} placeholder="SP-0001" /></Field><Field label="Note"><input value={paymentForm.note} onChange={e => setPaymentForm({ ...paymentForm, note: e.target.value })} placeholder="Tranche 1, inscription..." /></Field></div><ModalFooter onClose={() => setModal(null)} submit="Enregistrer le paiement" /></form></Modal>}
+    {modal === 'guardian' && <Modal title="Ajouter un parent / tuteur" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addGuardian}><div className="form-grid"><Field label="Nom complet"><input required value={guardianForm.fullName} onChange={e => setGuardianForm({ ...guardianForm, fullName: e.target.value })} placeholder="Ex. Mariam Ouédraogo" /></Field><Field label="Téléphone"><input required value={guardianForm.phone} onChange={e => setGuardianForm({ ...guardianForm, phone: e.target.value })} placeholder="+226 70 00 00 00" /></Field><Field label="WhatsApp"><input value={guardianForm.whatsapp} onChange={e => setGuardianForm({ ...guardianForm, whatsapp: e.target.value })} placeholder="+226 ..." /></Field><Field label="Lien avec l’élève"><select value={guardianForm.relationship} onChange={e => setGuardianForm({ ...guardianForm, relationship: e.target.value })}><option>Parent</option><option>Père</option><option>Mère</option><option>Tuteur</option><option>Autre</option></select></Field><Field label="Rattacher à un élève"><select value={guardianForm.studentId} onChange={e => setGuardianForm({ ...guardianForm, studentId: e.target.value })}><option value="">Plus tard</option>{students.map(item => <option key={item.id} value={item.id}>{item.first_name} {item.last_name}</option>)}</select></Field><Field label="E-mail"><input type="email" value={guardianForm.email} onChange={e => setGuardianForm({ ...guardianForm, email: e.target.value })} placeholder="parent@email.com" /></Field></div><ModalFooter onClose={() => setModal(null)} submit="Ajouter le parent" /></form></Modal>}
     {modal === 'fee' && <Modal title="Ajouter des frais scolaires" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addFee}><div className="form-grid"><Field label="Élève"><select required value={feeForm.studentId} onChange={e => setFeeForm({ ...feeForm, studentId: e.target.value })}><option value="">Choisir un élève</option>{students.map(item => <option key={item.id} value={item.id}>{item.first_name} {item.last_name}</option>)}</select></Field><Field label="Libellé"><input required value={feeForm.label} onChange={e => setFeeForm({ ...feeForm, label: e.target.value })} placeholder="Scolarité — tranche 1" /></Field><Field label="Montant (FCFA)"><input required type="number" min="1" value={feeForm.amount} onChange={e => setFeeForm({ ...feeForm, amount: e.target.value })} placeholder="75000" /></Field><Field label="Réduction (FCFA)"><input type="number" min="0" value={feeForm.discount} onChange={e => setFeeForm({ ...feeForm, discount: e.target.value })} placeholder="0" /></Field><Field label="Date d’échéance"><input type="date" value={feeForm.dueDate} onChange={e => setFeeForm({ ...feeForm, dueDate: e.target.value })} /></Field></div><ModalFooter onClose={() => setModal(null)} submit="Enregistrer les frais" /></form></Modal>}
     {modal === 'class' && <Modal title="Ajouter une classe" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addClass}><div className="form-grid"><Field label="Niveau"><select required value={classForm.levelId} onChange={e => setClassForm({ ...classForm, levelId: e.target.value })}>{levels.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Nom de la classe"><input required value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} placeholder="Ex. CP1 A ou 3e" /></Field></div><p className="form-hint">Une classe peut être nommée CP1 A, CP1 B, 6e 1, Tle D, etc.</p><ModalFooter onClose={() => setModal(null)} submit="Créer la classe" /></form></Modal>}
     {toast && <div className="cloud-toast"><span>✓</span>{toast}</div>}
@@ -310,6 +337,10 @@ function Overview({ school, students, classes, levels, payments, onAddStudent, o
 }
 
 function Students({ students, total, search, setSearch, onAdd, classes }) { return <><PageHeading eyebrow="Base élèves" title="Élèves" subtitle={`${total} élève${total > 1 ? 's' : ''} dans votre établissement.`} actions={<><button className="light-btn">↓ Exporter</button><button className="primary-btn" onClick={onAdd}>+ Ajouter un élève</button></>} /><div className="cloud-panel"><div className="table-toolbar"><div className="search"><span>⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom ou matricule..." /></div><span className="muted-count">{students.length} résultat{students.length > 1 ? 's' : ''}</span></div>{students.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Matricule</th><th>Statut</th><th></th></tr></thead><tbody>{students.map(student => <tr key={student.id}><td><div className="table-person"><span className="student-avatar">{initials(`${student.first_name} ${student.last_name}`)}</span><div><b>{student.first_name} {student.last_name}</b><small>Élève ScolaPilot</small></div></div></td><td>{student.student_number}</td><td><span className="active-pill">Actif</span></td><td><button className="row-menu">•••</button></td></tr>)}</tbody></table></div> : <EmptyState icon="⌕" title="Aucun résultat" text="Ajoutez un élève ou modifiez votre recherche." action="Ajouter un élève" onClick={onAdd} />}</div></> }
+
+function Guardians({ guardians, students, onAdd }) {
+  return <><PageHeading eyebrow="Communication famille" title="Parents & tuteurs" subtitle="Centralisez les contacts et rattachez chaque famille aux élèves." actions={<button className="primary-btn" onClick={onAdd}>+ Ajouter un parent</button>} /><div className="cloud-kpis"><Metric icon="♧" label="Contacts enregistrés" value={guardians.length} note="Données Supabase" /><Metric icon="☎" label="Téléphones" value={guardians.filter(item => item.phone).length} note="Prêts pour les relances" /><Metric icon="◉" label="WhatsApp" value={guardians.filter(item => item.whatsapp).length} note="À contacter" /><Metric icon="♙" label="Élèves" value={students.length} note="Base active" /></div><div className="cloud-panel"><div className="panel-heading"><div><h2>Répertoire des familles</h2><p>Les parents pourront bientôt recevoir les relances et reçus directement.</p></div><span className="count-badge">{guardians.length} contact(s)</span></div>{guardians.length ? <div className="table-scroll"><table><thead><tr><th>Parent / tuteur</th><th>Téléphone</th><th>WhatsApp</th><th>E-mail</th><th></th></tr></thead><tbody>{guardians.map(item => <tr key={item.id}><td><div className="table-person"><span className="student-avatar">{initials(item.full_name)}</span><div><b>{item.full_name}</b><small>Contact famille</small></div></div></td><td>{item.phone || '—'}</td><td>{item.whatsapp || '—'}</td><td>{item.email || '—'}</td><td><button className="row-menu">•••</button></td></tr>)}</tbody></table></div> : <EmptyState icon="♧" title="Aucun parent enregistré" text="Ajoutez un parent ou tuteur pour préparer la communication famille." action="Ajouter un parent" onClick={onAdd} />}</div></>
+}
 
 function Fees({ fees, payments, students, onAdd }) {
   const studentName = id => { const student = students.find(item => item.id === id); return student ? `${student.first_name} ${student.last_name}` : 'Élève non trouvé' }
