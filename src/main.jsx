@@ -30,12 +30,14 @@ function App() {
   const [classes, setClasses] = useState([])
   const [students, setStudents] = useState([])
   const [payments, setPayments] = useState([])
+  const [fees, setFees] = useState([])
   const [activeView, setActiveView] = useState('overview')
   const [toast, setToast] = useState('')
   const [onboarding, setOnboarding] = useState({ name: '', city: 'Ouagadougou', phone: '' })
   const [studentForm, setStudentForm] = useState({ firstName: '', lastName: '', studentNumber: '', classId: '' })
   const [classForm, setClassForm] = useState({ name: '', levelId: '' })
   const [paymentForm, setPaymentForm] = useState({ studentId: '', amount: '', method: 'cash', receiptNumber: '', note: '' })
+  const [feeForm, setFeeForm] = useState({ studentId: '', label: 'Scolarité — tranche 1', amount: '', dueDate: '', discount: '' })
   const [studentSearch, setStudentSearch] = useState('')
   const [modal, setModal] = useState(null)
 
@@ -96,21 +98,24 @@ function App() {
 
   async function loadSchoolData(activeSchool = school) {
     if (!activeSchool) return
-    const [{ data: nextLevels, error: levelError }, { data: nextClasses, error: classError }, { data: nextStudents, error: studentError }, { data: nextPayments, error: paymentError }] = await Promise.all([
+    const [{ data: nextLevels, error: levelError }, { data: nextClasses, error: classError }, { data: nextStudents, error: studentError }, { data: nextPayments, error: paymentError }, { data: nextFees, error: feeError }] = await Promise.all([
       supabase.from('levels').select('*').eq('school_id', activeSchool.id).order('sort_order'),
       supabase.from('classes').select('id, name, section, level_id, academic_year_id').eq('school_id', activeSchool.id).order('name'),
       supabase.from('students').select('*').eq('school_id', activeSchool.id).order('created_at', { ascending: false }),
       supabase.from('payments').select('*').eq('school_id', activeSchool.id).order('paid_at', { ascending: false }),
+      supabase.from('fee_assignments').select('*').eq('school_id', activeSchool.id).order('due_date'),
     ])
-    if (levelError || classError || studentError || paymentError) {
-      notify(levelError?.message || classError?.message || studentError?.message || paymentError?.message)
+    if (levelError || classError || studentError || paymentError || feeError) {
+      notify(levelError?.message || classError?.message || studentError?.message || paymentError?.message || feeError?.message)
       return
     }
     setLevels(nextLevels || [])
     setClasses(nextClasses || [])
     setStudents(nextStudents || [])
     setPayments(nextPayments || [])
+    setFees(nextFees || [])
     setPaymentForm(form => ({ ...form, studentId: form.studentId || nextStudents?.[0]?.id || '', receiptNumber: form.receiptNumber || `SP-${String((nextPayments?.length || 0) + 1).padStart(4, '0')}` }))
+    setFeeForm(form => ({ ...form, studentId: form.studentId || nextStudents?.[0]?.id || '' }))
     setStudentForm(form => ({ ...form, classId: form.classId || nextClasses?.[0]?.id || '' }))
     setClassForm(form => ({ ...form, levelId: form.levelId || nextLevels?.[0]?.id || '' }))
   }
@@ -219,6 +224,29 @@ function App() {
     notify('Paiement enregistré avec succès.')
   }
 
+  async function addFee(event) {
+    event.preventDefault()
+    const amount = Number(feeForm.amount)
+    if (!feeForm.studentId || !feeForm.label.trim() || !amount || amount <= 0) return notify('Choisis un élève et indique un montant valide.')
+    const { data: years } = await supabase.from('academic_years').select('id').eq('school_id', school.id).eq('is_current', true).limit(1)
+    const year = years?.[0]
+    if (!year) return notify('Aucune année scolaire active.')
+    const { error } = await supabase.from('fee_assignments').insert({
+      school_id: school.id,
+      student_id: feeForm.studentId,
+      academic_year_id: year.id,
+      label: feeForm.label.trim(),
+      amount,
+      discount: Number(feeForm.discount || 0),
+      due_date: feeForm.dueDate || null,
+    })
+    if (error) return notify(error.message)
+    setFeeForm({ studentId: students[0]?.id || '', label: 'Scolarité — tranche 1', amount: '', dueDate: '', discount: '' })
+    setModal(null)
+    await loadSchoolData()
+    notify('Frais scolaires assignés avec succès.')
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
     setActiveView('overview')
@@ -236,7 +264,7 @@ function App() {
   if (!school) return <Onboarding user={session.user} form={onboarding} setForm={setOnboarding} message={authMessage} onSubmit={createSchool} loading={workspaceLoading} signOut={signOut} />
 
   const activeLevelCount = levels.length
-  const currentView = activeView === 'overview' ? <Overview school={school} students={students} classes={classes} levels={levels} payments={payments} onAddStudent={() => setModal('student')} onAddClass={() => setModal('class')} onAddPayment={() => setModal('payment')} /> : activeView === 'students' ? <Students students={filteredStudents} total={students.length} search={studentSearch} setSearch={setStudentSearch} onAdd={() => setModal('student')} classes={classes} /> : activeView === 'classes' ? <Classes levels={levels} classes={classes} onAdd={() => setModal('class')} /> : activeView === 'payments' ? <Payments payments={payments} students={students} onAdd={() => setModal('payment')} /> : <Settings school={school} levels={levels} classes={classes} />
+  const currentView = activeView === 'overview' ? <Overview school={school} students={students} classes={classes} levels={levels} payments={payments} onAddStudent={() => setModal('student')} onAddClass={() => setModal('class')} onAddPayment={() => setModal('payment')} /> : activeView === 'students' ? <Students students={filteredStudents} total={students.length} search={studentSearch} setSearch={setStudentSearch} onAdd={() => setModal('student')} classes={classes} /> : activeView === 'classes' ? <Classes levels={levels} classes={classes} onAdd={() => setModal('class')} /> : activeView === 'payments' ? <Payments payments={payments} students={students} onAdd={() => setModal('payment')} /> : activeView === 'fees' ? <Fees fees={fees} payments={payments} students={students} onAdd={() => setModal('fee')} /> : <Settings school={school} levels={levels} classes={classes} />
 
   return <div className="cloud-app">
     <aside className="cloud-sidebar">
@@ -248,16 +276,18 @@ function App() {
         <NavButton active={activeView === 'students'} icon="♙" label="Élèves" onClick={() => setActiveView('students')} count={students.length} />
         <NavButton active={activeView === 'classes'} icon="▦" label="Niveaux & classes" onClick={() => setActiveView('classes')} count={activeLevelCount} />
         <NavButton active={activeView === 'payments'} icon="▣" label="Paiements" onClick={() => setActiveView('payments')} count={payments.length} />
+        <NavButton active={activeView === 'fees'} icon="◷" label="Frais & impayés" onClick={() => setActiveView('fees')} count={fees.length} />
         <NavButton active={activeView === 'settings'} icon="⚙" label="Paramètres" onClick={() => setActiveView('settings')} />
       </div>
       <div className="cloud-sidebar-bottom"><div className="cloud-help"><strong>Besoin d’aide ?</strong><p>Votre espace est sécurisé par Supabase.</p><a href="index.html#demo">Contacter l’équipe →</a></div><button className="cloud-user" onClick={signOut}><span className="user-avatar">{initials(session.user.user_metadata?.full_name || session.user.email)}</span><span><b>{session.user.user_metadata?.full_name || session.user.email}</b><small>Se déconnecter</small></span><i>↗</i></button></div>
     </aside>
     <main className="cloud-main">
-      <header className="cloud-topbar"><div><span className="crumb">ScolaPilot <b>›</b></span><strong>{activeView === 'overview' ? 'Vue d’ensemble' : activeView === 'students' ? 'Élèves' : activeView === 'classes' ? 'Niveaux & classes' : activeView === 'payments' ? 'Paiements' : 'Paramètres'}</strong></div><div className="top-actions"><span className="live"><i></i> Données en direct</span><span className="top-user">{initials(session.user.user_metadata?.full_name || session.user.email)}</span></div></header>
+      <header className="cloud-topbar"><div><span className="crumb">ScolaPilot <b>›</b></span><strong>{activeView === 'overview' ? 'Vue d’ensemble' : activeView === 'students' ? 'Élèves' : activeView === 'classes' ? 'Niveaux & classes' : activeView === 'payments' ? 'Paiements' : activeView === 'fees' ? 'Frais & impayés' : 'Paramètres'}</strong></div><div className="top-actions"><span className="live"><i></i> Données en direct</span><span className="top-user">{initials(session.user.user_metadata?.full_name || session.user.email)}</span></div></header>
       <div className="cloud-content">{currentView}</div>
     </main>
     {modal === 'student' && <Modal title="Ajouter un élève" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addStudent}><div className="form-grid"><Field label="Prénom"><input required value={studentForm.firstName} onChange={e => setStudentForm({ ...studentForm, firstName: e.target.value })} placeholder="Ex. Aïcha" /></Field><Field label="Nom"><input required value={studentForm.lastName} onChange={e => setStudentForm({ ...studentForm, lastName: e.target.value })} placeholder="Ex. Ouédraogo" /></Field><Field label="Matricule"><input required value={studentForm.studentNumber} onChange={e => setStudentForm({ ...studentForm, studentNumber: e.target.value })} placeholder="Ex. SP-2026-0001" /></Field><Field label="Classe"><select value={studentForm.classId} onChange={e => setStudentForm({ ...studentForm, classId: e.target.value })}><option value="">À affecter plus tard</option>{classes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field></div><ModalFooter onClose={() => setModal(null)} submit="Ajouter l’élève" /></form></Modal>}
     {modal === 'payment' && <Modal title="Enregistrer un paiement" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addPayment}><div className="form-grid"><Field label="Élève"><select required value={paymentForm.studentId} onChange={e => setPaymentForm({ ...paymentForm, studentId: e.target.value })}><option value="">Choisir un élève</option>{students.map(item => <option key={item.id} value={item.id}>{item.first_name} {item.last_name}</option>)}</select></Field><Field label="Montant (FCFA)"><input required type="number" min="1" value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })} placeholder="75000" /></Field><Field label="Mode de paiement"><select value={paymentForm.method} onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}><option value="cash">Espèces</option><option value="orange_money">Orange Money</option><option value="moov_money">Moov Money</option><option value="telecel_money">Telecel Money</option><option value="bank_transfer">Virement</option><option value="cheque">Chèque</option></select></Field><Field label="N° de reçu"><input required value={paymentForm.receiptNumber} onChange={e => setPaymentForm({ ...paymentForm, receiptNumber: e.target.value })} placeholder="SP-0001" /></Field><Field label="Note"><input value={paymentForm.note} onChange={e => setPaymentForm({ ...paymentForm, note: e.target.value })} placeholder="Tranche 1, inscription..." /></Field></div><ModalFooter onClose={() => setModal(null)} submit="Enregistrer le paiement" /></form></Modal>}
+    {modal === 'fee' && <Modal title="Ajouter des frais scolaires" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addFee}><div className="form-grid"><Field label="Élève"><select required value={feeForm.studentId} onChange={e => setFeeForm({ ...feeForm, studentId: e.target.value })}><option value="">Choisir un élève</option>{students.map(item => <option key={item.id} value={item.id}>{item.first_name} {item.last_name}</option>)}</select></Field><Field label="Libellé"><input required value={feeForm.label} onChange={e => setFeeForm({ ...feeForm, label: e.target.value })} placeholder="Scolarité — tranche 1" /></Field><Field label="Montant (FCFA)"><input required type="number" min="1" value={feeForm.amount} onChange={e => setFeeForm({ ...feeForm, amount: e.target.value })} placeholder="75000" /></Field><Field label="Réduction (FCFA)"><input type="number" min="0" value={feeForm.discount} onChange={e => setFeeForm({ ...feeForm, discount: e.target.value })} placeholder="0" /></Field><Field label="Date d’échéance"><input type="date" value={feeForm.dueDate} onChange={e => setFeeForm({ ...feeForm, dueDate: e.target.value })} /></Field></div><ModalFooter onClose={() => setModal(null)} submit="Enregistrer les frais" /></form></Modal>}
     {modal === 'class' && <Modal title="Ajouter une classe" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addClass}><div className="form-grid"><Field label="Niveau"><select required value={classForm.levelId} onChange={e => setClassForm({ ...classForm, levelId: e.target.value })}>{levels.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Nom de la classe"><input required value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} placeholder="Ex. CP1 A ou 3e" /></Field></div><p className="form-hint">Une classe peut être nommée CP1 A, CP1 B, 6e 1, Tle D, etc.</p><ModalFooter onClose={() => setModal(null)} submit="Créer la classe" /></form></Modal>}
     {toast && <div className="cloud-toast"><span>✓</span>{toast}</div>}
   </div>
@@ -281,11 +311,26 @@ function Overview({ school, students, classes, levels, payments, onAddStudent, o
 
 function Students({ students, total, search, setSearch, onAdd, classes }) { return <><PageHeading eyebrow="Base élèves" title="Élèves" subtitle={`${total} élève${total > 1 ? 's' : ''} dans votre établissement.`} actions={<><button className="light-btn">↓ Exporter</button><button className="primary-btn" onClick={onAdd}>+ Ajouter un élève</button></>} /><div className="cloud-panel"><div className="table-toolbar"><div className="search"><span>⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom ou matricule..." /></div><span className="muted-count">{students.length} résultat{students.length > 1 ? 's' : ''}</span></div>{students.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Matricule</th><th>Statut</th><th></th></tr></thead><tbody>{students.map(student => <tr key={student.id}><td><div className="table-person"><span className="student-avatar">{initials(`${student.first_name} ${student.last_name}`)}</span><div><b>{student.first_name} {student.last_name}</b><small>Élève ScolaPilot</small></div></div></td><td>{student.student_number}</td><td><span className="active-pill">Actif</span></td><td><button className="row-menu">•••</button></td></tr>)}</tbody></table></div> : <EmptyState icon="⌕" title="Aucun résultat" text="Ajoutez un élève ou modifiez votre recherche." action="Ajouter un élève" onClick={onAdd} />}</div></> }
 
+function Fees({ fees, payments, students, onAdd }) {
+  const studentName = id => { const student = students.find(item => item.id === id); return student ? `${student.first_name} ${student.last_name}` : 'Élève non trouvé' }
+  const assigned = fees.reduce((sum, item) => sum + Number(item.amount || 0) - Number(item.discount || 0), 0)
+  const paid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  const outstanding = Math.max(assigned - paid, 0)
+  return <><PageHeading eyebrow="Scolarité" title="Frais & impayés" subtitle="Définissez ce que chaque élève doit payer et repérez les soldes restants." actions={<button className="primary-btn" onClick={onAdd}>+ Ajouter des frais</button>} /><div className="cloud-kpis payment-kpis"><Metric icon="◷" label="Frais assignés" value={fees.length} note={money(assigned)} /><Metric icon="↗" label="Déjà encaissé" value={money(paid).replace(' FCFA', '')} note="Tous paiements" /><Metric icon="!" label="Solde estimé" value={money(outstanding).replace(' FCFA', '')} note="À recouvrer" /><Metric icon="✓" label="Suivi" value={fees.length ? 'Actif' : 'Prêt'} note="Par élève" /></div><div className="cloud-panel"><div className="panel-heading"><div><h2>Échéances configurées</h2><p>Les frais assignés apparaissent dans le dossier de chaque élève.</p></div><span className="count-badge">{fees.length} ligne(s)</span></div>{fees.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Libellé</th><th>Montant net</th><th>Échéance</th><th>Statut</th></tr></thead><tbody>{fees.map(fee => { const net = Number(fee.amount || 0) - Number(fee.discount || 0); const studentPaid = payments.filter(item => item.student_id === fee.student_id).reduce((sum, item) => sum + Number(item.amount || 0), 0); const isPaid = studentPaid >= net; return <tr key={fee.id}><td><div className="table-person"><span className="student-avatar">{initials(studentName(fee.student_id))}</span><div><b>{studentName(fee.student_id)}</b><small>Frais scolaires</small></div></div></td><td>{fee.label}</td><td><b>{money(net)}</b></td><td>{fee.due_date ? new Date(fee.due_date).toLocaleDateString('fr-FR') : 'Non définie'}</td><td><span className={`active-pill ${isPaid ? '' : 'late-pill'}`}>{isPaid ? 'Payé' : 'À recouvrer'}</span></td></tr>})}</tbody></table></div> : <EmptyState icon="◷" title="Aucun frais configuré" text="Commencez par assigner une tranche de scolarité à un élève." action="Ajouter des frais" onClick={onAdd} />}</div></>
+}
+
 function Payments({ payments, students, onAdd }) {
   const studentName = id => { const student = students.find(item => item.id === id); return student ? `${student.first_name} ${student.last_name}` : 'Élève non trouvé' }
   const methodLabel = method => ({ cash: 'Espèces', orange_money: 'Orange Money', moov_money: 'Moov Money', telecel_money: 'Telecel Money', bank_transfer: 'Virement', cheque: 'Chèque', other: 'Autre' })[method] || method
+  const printReceipt = payment => {
+    const name = studentName(payment.student_id)
+    const receipt = window.open('', '_blank', 'width=720,height=800')
+    if (!receipt) return
+    receipt.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Reçu ${payment.receipt_number}</title><style>body{font-family:Arial,sans-serif;color:#17333a;padding:38px;max-width:650px;margin:auto}header{display:flex;justify-content:space-between;border-bottom:3px solid #1d6b60;padding-bottom:18px}h1{font-size:23px;margin:0 0 5px}h2{font-size:17px;margin:34px 0 15px}.muted{color:#738582;font-size:12px}.total{margin:25px 0;padding:22px;border-radius:13px;background:#e5f3ec;color:#1d6b60;font-size:30px;font-weight:800}.row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #e5ebe6;font-size:13px}.row b{color:#17333a}.footer{margin-top:48px;color:#738582;font-size:11px;text-align:center}</style></head><body><header><div><h1>ScolaPilot</h1><div class="muted">Reçu de paiement scolaire</div></div><div style="text-align:right"><b>${payment.receipt_number}</b><div class="muted">${new Date(payment.paid_at).toLocaleDateString('fr-FR')}</div></div></header><h2>Élève</h2><div class="row"><span>Nom complet</span><b>${name}</b></div><div class="row"><span>Mode de paiement</span><b>${methodLabel(payment.method)}</b></div><div class="total">${money(payment.amount)}</div><div class="row"><span>Note</span><b>${payment.note || 'Paiement scolaire'}</b></div><div class="footer">Document généré par ScolaPilot · À conserver comme justificatif.</div><script>window.onload=()=>setTimeout(()=>window.print(),250)</script></body></html>`)
+    receipt.document.close()
+  }
   const total = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0)
-  return <><PageHeading eyebrow="Suivi financier" title="Paiements" subtitle="Enregistrez les règlements et gardez une trace de chaque reçu." actions={<button className="primary-btn" onClick={onAdd}>+ Enregistrer un paiement</button>} /><div className="cloud-kpis payment-kpis"><Metric icon="▣" label="Paiements enregistrés" value={payments.length} note="Depuis Supabase" /><Metric icon="↗" label="Total encaissé" value={total ? `${Math.round(total / 1000)}k` : '0'} note="FCFA" /><Metric icon="◷" label="Dernier reçu" value={payments[0]?.receipt_number || '—'} note={payments[0] ? 'Dernière opération' : 'Aucun reçu'} /><Metric icon="✓" label="Statut" value="Actif" note="RLS sécurisé" /></div><div className="cloud-panel"><div className="panel-heading"><div><h2>Historique des paiements</h2><p>Les paiements sont enregistrés avec leur reçu et leur mode de règlement.</p></div><span className="count-badge">{payments.length} reçu(s)</span></div>{payments.length ? <div className="table-scroll"><table><thead><tr><th>Reçu</th><th>Élève</th><th>Montant</th><th>Mode</th><th>Date</th><th></th></tr></thead><tbody>{payments.map(payment => <tr key={payment.id}><td><b>{payment.receipt_number}</b></td><td><div className="table-person"><span className="student-avatar">{initials(studentName(payment.student_id))}</span><div><b>{studentName(payment.student_id)}</b><small>{payment.note || 'Paiement scolaire'}</small></div></div></td><td><b>{money(payment.amount)}</b></td><td><span className="active-pill">{methodLabel(payment.method)}</span></td><td>{new Date(payment.paid_at).toLocaleDateString('fr-FR')}</td><td><button className="row-menu">•••</button></td></tr>)}</tbody></table></div> : <EmptyState icon="▣" title="Aucun paiement enregistré" text="Le premier règlement de l’école apparaîtra ici avec son numéro de reçu." action="Enregistrer un paiement" onClick={onAdd} />}</div></>
+  return <><PageHeading eyebrow="Suivi financier" title="Paiements" subtitle="Enregistrez les règlements et gardez une trace de chaque reçu." actions={<button className="primary-btn" onClick={onAdd}>+ Enregistrer un paiement</button>} /><div className="cloud-kpis payment-kpis"><Metric icon="▣" label="Paiements enregistrés" value={payments.length} note="Depuis Supabase" /><Metric icon="↗" label="Total encaissé" value={total ? `${Math.round(total / 1000)}k` : '0'} note="FCFA" /><Metric icon="◷" label="Dernier reçu" value={payments[0]?.receipt_number || '—'} note={payments[0] ? 'Dernière opération' : 'Aucun reçu'} /><Metric icon="✓" label="Statut" value="Actif" note="RLS sécurisé" /></div><div className="cloud-panel"><div className="panel-heading"><div><h2>Historique des paiements</h2><p>Les paiements sont enregistrés avec leur reçu et leur mode de règlement.</p></div><span className="count-badge">{payments.length} reçu(s)</span></div>{payments.length ? <div className="table-scroll"><table><thead><tr><th>Reçu</th><th>Élève</th><th>Montant</th><th>Mode</th><th>Date</th><th></th></tr></thead><tbody>{payments.map(payment => <tr key={payment.id}><td><b>{payment.receipt_number}</b></td><td><div className="table-person"><span className="student-avatar">{initials(studentName(payment.student_id))}</span><div><b>{studentName(payment.student_id)}</b><small>{payment.note || 'Paiement scolaire'}</small></div></div></td><td><b>{money(payment.amount)}</b></td><td><span className="active-pill">{methodLabel(payment.method)}</span></td><td>{new Date(payment.paid_at).toLocaleDateString('fr-FR')}</td><td><button className="row-menu" onClick={() => printReceipt(payment)} title="Imprimer le reçu">↗</button></td></tr>)}</tbody></table></div> : <EmptyState icon="▣" title="Aucun paiement enregistré" text="Le premier règlement de l’école apparaîtra ici avec son numéro de reçu." action="Enregistrer un paiement" onClick={onAdd} />}</div></>
 }
 
 function Classes({ levels, classes, onAdd }) { return <><PageHeading eyebrow="Organisation" title="Niveaux & classes" subtitle="La structure officielle de votre établissement est prête à être configurée." actions={<button className="primary-btn" onClick={onAdd}>+ Ajouter une classe</button>} /><div className="cloud-panel"><div className="panel-heading"><div><h2>Catalogue des niveaux</h2><p>Préscolaire, primaire, postprimaire et secondaire.</p></div><span className="count-badge">{levels.length} niveaux</span></div><div className="levels-full-grid">{levels.map(level => <div className="level-row" key={level.id}><span className={`level-symbol ${level.category}`}>{level.name.slice(0, 2)}</span><div><b>{level.name}</b><small>{level.category === 'preschool' ? 'Préscolaire' : level.category === 'primary' ? 'Primaire' : level.category === 'postprimary' ? 'Postprimaire' : 'Secondaire'}</small></div><span className="class-count">{classes.filter(item => item.level_id === level.id).length} classe(s)</span></div>)}</div></div><div className="cloud-panel class-list-panel"><div className="panel-heading"><div><h2>Classes créées</h2><p>Une classe peut avoir plusieurs sections.</p></div></div>{classes.length ? <div className="simple-list">{classes.map(item => <div className="simple-row" key={item.id}><span className="class-icon">▦</span><div><b>{item.name}</b><small>Niveau configuré</small></div><span className="active-pill">Active</span></div>)}</div> : <EmptyState icon="▦" title="Aucune classe créée" text="Créez CP1 A, 6e 1, Tle D ou toute autre classe de votre établissement." action="Créer une classe" onClick={onAdd} />}</div></> }
