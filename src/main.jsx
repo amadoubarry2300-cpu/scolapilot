@@ -29,11 +29,13 @@ function App() {
   const [levels, setLevels] = useState([])
   const [classes, setClasses] = useState([])
   const [students, setStudents] = useState([])
+  const [payments, setPayments] = useState([])
   const [activeView, setActiveView] = useState('overview')
   const [toast, setToast] = useState('')
   const [onboarding, setOnboarding] = useState({ name: '', city: 'Ouagadougou', phone: '' })
   const [studentForm, setStudentForm] = useState({ firstName: '', lastName: '', studentNumber: '', classId: '' })
   const [classForm, setClassForm] = useState({ name: '', levelId: '' })
+  const [paymentForm, setPaymentForm] = useState({ studentId: '', amount: '', method: 'cash', receiptNumber: '', note: '' })
   const [studentSearch, setStudentSearch] = useState('')
   const [modal, setModal] = useState(null)
 
@@ -94,18 +96,21 @@ function App() {
 
   async function loadSchoolData(activeSchool = school) {
     if (!activeSchool) return
-    const [{ data: nextLevels, error: levelError }, { data: nextClasses, error: classError }, { data: nextStudents, error: studentError }] = await Promise.all([
+    const [{ data: nextLevels, error: levelError }, { data: nextClasses, error: classError }, { data: nextStudents, error: studentError }, { data: nextPayments, error: paymentError }] = await Promise.all([
       supabase.from('levels').select('*').eq('school_id', activeSchool.id).order('sort_order'),
       supabase.from('classes').select('id, name, section, level_id, academic_year_id').eq('school_id', activeSchool.id).order('name'),
       supabase.from('students').select('*').eq('school_id', activeSchool.id).order('created_at', { ascending: false }),
+      supabase.from('payments').select('*').eq('school_id', activeSchool.id).order('paid_at', { ascending: false }),
     ])
-    if (levelError || classError || studentError) {
-      notify(levelError?.message || classError?.message || studentError?.message)
+    if (levelError || classError || studentError || paymentError) {
+      notify(levelError?.message || classError?.message || studentError?.message || paymentError?.message)
       return
     }
     setLevels(nextLevels || [])
     setClasses(nextClasses || [])
     setStudents(nextStudents || [])
+    setPayments(nextPayments || [])
+    setPaymentForm(form => ({ ...form, studentId: form.studentId || nextStudents?.[0]?.id || '', receiptNumber: form.receiptNumber || `SP-${String((nextPayments?.length || 0) + 1).padStart(4, '0')}` }))
     setStudentForm(form => ({ ...form, classId: form.classId || nextClasses?.[0]?.id || '' }))
     setClassForm(form => ({ ...form, levelId: form.levelId || nextLevels?.[0]?.id || '' }))
   }
@@ -193,6 +198,27 @@ function App() {
     notify('Élève ajouté avec succès.')
   }
 
+  async function addPayment(event) {
+    event.preventDefault()
+    const amount = Number(paymentForm.amount)
+    if (!paymentForm.studentId || !amount || amount <= 0) return notify('Choisis un élève et indique un montant valide.')
+    const receiptNumber = paymentForm.receiptNumber.trim() || `SP-${Date.now().toString().slice(-6)}`
+    const { error } = await supabase.from('payments').insert({
+      school_id: school.id,
+      student_id: paymentForm.studentId,
+      receipt_number: receiptNumber,
+      amount,
+      method: paymentForm.method,
+      note: paymentForm.note.trim() || null,
+      created_by: session.user.id,
+    })
+    if (error) return notify(error.message)
+    setPaymentForm({ studentId: students[0]?.id || '', amount: '', method: 'cash', receiptNumber: `SP-${String(payments.length + 2).padStart(4, '0')}`, note: '' })
+    setModal(null)
+    await loadSchoolData()
+    notify('Paiement enregistré avec succès.')
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
     setActiveView('overview')
@@ -210,7 +236,7 @@ function App() {
   if (!school) return <Onboarding user={session.user} form={onboarding} setForm={setOnboarding} message={authMessage} onSubmit={createSchool} loading={workspaceLoading} signOut={signOut} />
 
   const activeLevelCount = levels.length
-  const currentView = activeView === 'overview' ? <Overview school={school} students={students} classes={classes} levels={levels} onAddStudent={() => setModal('student')} onAddClass={() => setModal('class')} /> : activeView === 'students' ? <Students students={filteredStudents} total={students.length} search={studentSearch} setSearch={setStudentSearch} onAdd={() => setModal('student')} classes={classes} /> : activeView === 'classes' ? <Classes levels={levels} classes={classes} onAdd={() => setModal('class')} /> : <Settings school={school} levels={levels} classes={classes} />
+  const currentView = activeView === 'overview' ? <Overview school={school} students={students} classes={classes} levels={levels} payments={payments} onAddStudent={() => setModal('student')} onAddClass={() => setModal('class')} onAddPayment={() => setModal('payment')} /> : activeView === 'students' ? <Students students={filteredStudents} total={students.length} search={studentSearch} setSearch={setStudentSearch} onAdd={() => setModal('student')} classes={classes} /> : activeView === 'classes' ? <Classes levels={levels} classes={classes} onAdd={() => setModal('class')} /> : activeView === 'payments' ? <Payments payments={payments} students={students} onAdd={() => setModal('payment')} /> : <Settings school={school} levels={levels} classes={classes} />
 
   return <div className="cloud-app">
     <aside className="cloud-sidebar">
@@ -221,15 +247,17 @@ function App() {
         <NavButton active={activeView === 'overview'} icon="◈" label="Vue d’ensemble" onClick={() => setActiveView('overview')} />
         <NavButton active={activeView === 'students'} icon="♙" label="Élèves" onClick={() => setActiveView('students')} count={students.length} />
         <NavButton active={activeView === 'classes'} icon="▦" label="Niveaux & classes" onClick={() => setActiveView('classes')} count={activeLevelCount} />
+        <NavButton active={activeView === 'payments'} icon="▣" label="Paiements" onClick={() => setActiveView('payments')} count={payments.length} />
         <NavButton active={activeView === 'settings'} icon="⚙" label="Paramètres" onClick={() => setActiveView('settings')} />
       </div>
       <div className="cloud-sidebar-bottom"><div className="cloud-help"><strong>Besoin d’aide ?</strong><p>Votre espace est sécurisé par Supabase.</p><a href="index.html#demo">Contacter l’équipe →</a></div><button className="cloud-user" onClick={signOut}><span className="user-avatar">{initials(session.user.user_metadata?.full_name || session.user.email)}</span><span><b>{session.user.user_metadata?.full_name || session.user.email}</b><small>Se déconnecter</small></span><i>↗</i></button></div>
     </aside>
     <main className="cloud-main">
-      <header className="cloud-topbar"><div><span className="crumb">ScolaPilot <b>›</b></span><strong>{activeView === 'overview' ? 'Vue d’ensemble' : activeView === 'students' ? 'Élèves' : activeView === 'classes' ? 'Niveaux & classes' : 'Paramètres'}</strong></div><div className="top-actions"><span className="live"><i></i> Données en direct</span><span className="top-user">{initials(session.user.user_metadata?.full_name || session.user.email)}</span></div></header>
+      <header className="cloud-topbar"><div><span className="crumb">ScolaPilot <b>›</b></span><strong>{activeView === 'overview' ? 'Vue d’ensemble' : activeView === 'students' ? 'Élèves' : activeView === 'classes' ? 'Niveaux & classes' : activeView === 'payments' ? 'Paiements' : 'Paramètres'}</strong></div><div className="top-actions"><span className="live"><i></i> Données en direct</span><span className="top-user">{initials(session.user.user_metadata?.full_name || session.user.email)}</span></div></header>
       <div className="cloud-content">{currentView}</div>
     </main>
     {modal === 'student' && <Modal title="Ajouter un élève" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addStudent}><div className="form-grid"><Field label="Prénom"><input required value={studentForm.firstName} onChange={e => setStudentForm({ ...studentForm, firstName: e.target.value })} placeholder="Ex. Aïcha" /></Field><Field label="Nom"><input required value={studentForm.lastName} onChange={e => setStudentForm({ ...studentForm, lastName: e.target.value })} placeholder="Ex. Ouédraogo" /></Field><Field label="Matricule"><input required value={studentForm.studentNumber} onChange={e => setStudentForm({ ...studentForm, studentNumber: e.target.value })} placeholder="Ex. SP-2026-0001" /></Field><Field label="Classe"><select value={studentForm.classId} onChange={e => setStudentForm({ ...studentForm, classId: e.target.value })}><option value="">À affecter plus tard</option>{classes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field></div><ModalFooter onClose={() => setModal(null)} submit="Ajouter l’élève" /></form></Modal>}
+    {modal === 'payment' && <Modal title="Enregistrer un paiement" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addPayment}><div className="form-grid"><Field label="Élève"><select required value={paymentForm.studentId} onChange={e => setPaymentForm({ ...paymentForm, studentId: e.target.value })}><option value="">Choisir un élève</option>{students.map(item => <option key={item.id} value={item.id}>{item.first_name} {item.last_name}</option>)}</select></Field><Field label="Montant (FCFA)"><input required type="number" min="1" value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })} placeholder="75000" /></Field><Field label="Mode de paiement"><select value={paymentForm.method} onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}><option value="cash">Espèces</option><option value="orange_money">Orange Money</option><option value="moov_money">Moov Money</option><option value="telecel_money">Telecel Money</option><option value="bank_transfer">Virement</option><option value="cheque">Chèque</option></select></Field><Field label="N° de reçu"><input required value={paymentForm.receiptNumber} onChange={e => setPaymentForm({ ...paymentForm, receiptNumber: e.target.value })} placeholder="SP-0001" /></Field><Field label="Note"><input value={paymentForm.note} onChange={e => setPaymentForm({ ...paymentForm, note: e.target.value })} placeholder="Tranche 1, inscription..." /></Field></div><ModalFooter onClose={() => setModal(null)} submit="Enregistrer le paiement" /></form></Modal>}
     {modal === 'class' && <Modal title="Ajouter une classe" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addClass}><div className="form-grid"><Field label="Niveau"><select required value={classForm.levelId} onChange={e => setClassForm({ ...classForm, levelId: e.target.value })}>{levels.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Nom de la classe"><input required value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} placeholder="Ex. CP1 A ou 3e" /></Field></div><p className="form-hint">Une classe peut être nommée CP1 A, CP1 B, 6e 1, Tle D, etc.</p><ModalFooter onClose={() => setModal(null)} submit="Créer la classe" /></form></Modal>}
     {toast && <div className="cloud-toast"><span>✓</span>{toast}</div>}
   </div>
@@ -240,18 +268,25 @@ function Field({ label, children }) { return <label className="field"><span>{lab
 function Modal({ title, onClose, children }) { return <div className="modal-layer" onMouseDown={e => e.target === e.currentTarget && onClose()}><div className="cloud-modal"><div className="modal-header"><h2>{title}</h2><button onClick={onClose}>×</button></div>{children}</div></div> }
 function ModalFooter({ onClose, submit }) { return <div className="modal-footer"><button type="button" className="light-btn" onClick={onClose}>Annuler</button><button type="submit" className="primary-btn">{submit}</button></div> }
 
-function Overview({ school, students, classes, levels, onAddStudent, onAddClass }) {
+function Overview({ school, students, classes, levels, payments, onAddStudent, onAddClass, onAddPayment }) {
   const grouped = levels.map(level => ({ ...level, count: students.length ? Math.max(0, Math.round(students.length / Math.max(levels.length, 1))) : 0 })).slice(0, 6)
   return <>
-    <PageHeading eyebrow="Espace connecté" title={`Bonjour, ${school.name}`} subtitle="Votre établissement est prêt. Commencez par créer vos classes et vos premiers élèves." actions={<><button className="light-btn" onClick={onAddClass}>+ Créer une classe</button><button className="primary-btn" onClick={onAddStudent}>+ Ajouter un élève</button></>} />
+    <PageHeading eyebrow="Espace connecté" title={`Bonjour, ${school.name}`} subtitle="Votre établissement est prêt. Commencez par créer vos classes et vos premiers élèves." actions={<><button className="light-btn" onClick={onAddClass}>+ Créer une classe</button><button className="light-btn" onClick={onAddPayment}>+ Paiement</button><button className="primary-btn" onClick={onAddStudent}>+ Ajouter un élève</button></>} />
     <div className="cloud-notice"><span>☁</span><div><b>Base Supabase connectée.</b> Les données saisies ici seront enregistrées dans votre espace sécurisé.</div></div>
-    <div className="cloud-kpis"><Metric icon="♙" label="Élèves actifs" value={students.length} note="Données réelles" /><Metric icon="▦" label="Classes créées" value={classes.length} note={`${levels.length} niveaux disponibles`} /><Metric icon="↗" label="Niveaux configurés" value={levels.length} note="Préscolaire à Tle" /><Metric icon="▣" label="Paiements" value="—" note="Prochaine étape" /></div>
+    <div className="cloud-kpis"><Metric icon="♙" label="Élèves actifs" value={students.length} note="Données réelles" /><Metric icon="▦" label="Classes créées" value={classes.length} note={`${levels.length} niveaux disponibles`} /><Metric icon="↗" label="Niveaux configurés" value={levels.length} note="Préscolaire à Tle" /><Metric icon="▣" label="Paiements enregistrés" value={payments.length} note="Données Supabase" /></div>
     <div className="cloud-two-columns"><div className="cloud-panel"><div className="panel-heading"><div><h2>Votre structure scolaire</h2><p>Les niveaux prêts à accueillir vos classes</p></div><button className="text-btn" onClick={() => {}}>Voir les détails →</button></div><div className="level-cloud">{grouped.map(level => <div className="level-tile" key={level.id}><span className={`level-symbol ${level.category}`}>{level.name.slice(0, 2)}</span><div><b>{level.name}</b><small>{level.count} élève{level.count > 1 ? 's' : ''}</small></div><span className="tile-arrow">›</span></div>)}</div><div className="level-note">Les niveaux restants sont disponibles dans <b>Niveaux & classes</b>.</div></div><div className="cloud-panel accent-panel"><span className="panel-kicker">Prochaine action recommandée</span><h2>Créez votre première classe</h2><p>Une classe relie un niveau à une année scolaire. Vous pourrez ensuite affecter les élèves et suivre les paiements par classe.</p><button className="primary-btn" onClick={onAddClass}>Créer une classe <span>↗</span></button><div className="accent-dots"><i></i><i></i><i></i></div></div></div>
     <div className="cloud-panel recent-panel"><div className="panel-heading"><div><h2>Premiers élèves</h2><p>Les élèves apparaîtront ici après leur création.</p></div><button className="light-btn" onClick={onAddStudent}>+ Ajouter</button></div>{students.length === 0 ? <EmptyState icon="♙" title="Aucun élève pour le moment" text="Commencez par ajouter votre premier élève." action="Ajouter un élève" onClick={onAddStudent} /> : <div className="simple-list">{students.slice(0, 5).map(student => <div className="simple-row" key={student.id}><span className="student-avatar">{initials(`${student.first_name} ${student.last_name}`)}</span><div><b>{student.first_name} {student.last_name}</b><small>{student.student_number}</small></div><span className="active-pill">Actif</span></div>)}</div>}</div>
   </>
 }
 
 function Students({ students, total, search, setSearch, onAdd, classes }) { return <><PageHeading eyebrow="Base élèves" title="Élèves" subtitle={`${total} élève${total > 1 ? 's' : ''} dans votre établissement.`} actions={<><button className="light-btn">↓ Exporter</button><button className="primary-btn" onClick={onAdd}>+ Ajouter un élève</button></>} /><div className="cloud-panel"><div className="table-toolbar"><div className="search"><span>⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom ou matricule..." /></div><span className="muted-count">{students.length} résultat{students.length > 1 ? 's' : ''}</span></div>{students.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Matricule</th><th>Statut</th><th></th></tr></thead><tbody>{students.map(student => <tr key={student.id}><td><div className="table-person"><span className="student-avatar">{initials(`${student.first_name} ${student.last_name}`)}</span><div><b>{student.first_name} {student.last_name}</b><small>Élève ScolaPilot</small></div></div></td><td>{student.student_number}</td><td><span className="active-pill">Actif</span></td><td><button className="row-menu">•••</button></td></tr>)}</tbody></table></div> : <EmptyState icon="⌕" title="Aucun résultat" text="Ajoutez un élève ou modifiez votre recherche." action="Ajouter un élève" onClick={onAdd} />}</div></> }
+
+function Payments({ payments, students, onAdd }) {
+  const studentName = id => { const student = students.find(item => item.id === id); return student ? `${student.first_name} ${student.last_name}` : 'Élève non trouvé' }
+  const methodLabel = method => ({ cash: 'Espèces', orange_money: 'Orange Money', moov_money: 'Moov Money', telecel_money: 'Telecel Money', bank_transfer: 'Virement', cheque: 'Chèque', other: 'Autre' })[method] || method
+  const total = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  return <><PageHeading eyebrow="Suivi financier" title="Paiements" subtitle="Enregistrez les règlements et gardez une trace de chaque reçu." actions={<button className="primary-btn" onClick={onAdd}>+ Enregistrer un paiement</button>} /><div className="cloud-kpis payment-kpis"><Metric icon="▣" label="Paiements enregistrés" value={payments.length} note="Depuis Supabase" /><Metric icon="↗" label="Total encaissé" value={total ? `${Math.round(total / 1000)}k` : '0'} note="FCFA" /><Metric icon="◷" label="Dernier reçu" value={payments[0]?.receipt_number || '—'} note={payments[0] ? 'Dernière opération' : 'Aucun reçu'} /><Metric icon="✓" label="Statut" value="Actif" note="RLS sécurisé" /></div><div className="cloud-panel"><div className="panel-heading"><div><h2>Historique des paiements</h2><p>Les paiements sont enregistrés avec leur reçu et leur mode de règlement.</p></div><span className="count-badge">{payments.length} reçu(s)</span></div>{payments.length ? <div className="table-scroll"><table><thead><tr><th>Reçu</th><th>Élève</th><th>Montant</th><th>Mode</th><th>Date</th><th></th></tr></thead><tbody>{payments.map(payment => <tr key={payment.id}><td><b>{payment.receipt_number}</b></td><td><div className="table-person"><span className="student-avatar">{initials(studentName(payment.student_id))}</span><div><b>{studentName(payment.student_id)}</b><small>{payment.note || 'Paiement scolaire'}</small></div></div></td><td><b>{money(payment.amount)}</b></td><td><span className="active-pill">{methodLabel(payment.method)}</span></td><td>{new Date(payment.paid_at).toLocaleDateString('fr-FR')}</td><td><button className="row-menu">•••</button></td></tr>)}</tbody></table></div> : <EmptyState icon="▣" title="Aucun paiement enregistré" text="Le premier règlement de l’école apparaîtra ici avec son numéro de reçu." action="Enregistrer un paiement" onClick={onAdd} />}</div></>
+}
 
 function Classes({ levels, classes, onAdd }) { return <><PageHeading eyebrow="Organisation" title="Niveaux & classes" subtitle="La structure officielle de votre établissement est prête à être configurée." actions={<button className="primary-btn" onClick={onAdd}>+ Ajouter une classe</button>} /><div className="cloud-panel"><div className="panel-heading"><div><h2>Catalogue des niveaux</h2><p>Préscolaire, primaire, postprimaire et secondaire.</p></div><span className="count-badge">{levels.length} niveaux</span></div><div className="levels-full-grid">{levels.map(level => <div className="level-row" key={level.id}><span className={`level-symbol ${level.category}`}>{level.name.slice(0, 2)}</span><div><b>{level.name}</b><small>{level.category === 'preschool' ? 'Préscolaire' : level.category === 'primary' ? 'Primaire' : level.category === 'postprimary' ? 'Postprimaire' : 'Secondaire'}</small></div><span className="class-count">{classes.filter(item => item.level_id === level.id).length} classe(s)</span></div>)}</div></div><div className="cloud-panel class-list-panel"><div className="panel-heading"><div><h2>Classes créées</h2><p>Une classe peut avoir plusieurs sections.</p></div></div>{classes.length ? <div className="simple-list">{classes.map(item => <div className="simple-row" key={item.id}><span className="class-icon">▦</span><div><b>{item.name}</b><small>Niveau configuré</small></div><span className="active-pill">Active</span></div>)}</div> : <EmptyState icon="▦" title="Aucune classe créée" text="Créez CP1 A, 6e 1, Tle D ou toute autre classe de votre établissement." action="Créer une classe" onClick={onAdd} />}</div></> }
 
