@@ -20,7 +20,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         landing: resolve(root, 'index.html'),
-        demo: resolve(root, 'dashboard.html'),
         app: resolve(root, 'app.html'),
       },
     },

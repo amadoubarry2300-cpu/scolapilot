@@ -3,14 +3,13 @@
 ## Architecture
 
 - **Supabase** : Auth, PostgreSQL, RLS, stockage des logos et photos.
-- **React + Vite** : vitrine, démo dashboard et espace connecté.
+- **React + Vite** : vitrine et espace connecté.
 - **GitHub** : dépôt du code et historique des versions.
 - **Vercel** : déploiement automatique depuis GitHub.
 
 ## Fichiers importants
 
 - `index.html` : vitrine publique ;
-- `dashboard.html` : dashboard de démonstration avec données fictives ;
 - `app.html` : application connectée à Supabase ;
 - `supabase/schema.sql` : tables, fonctions RPC et RLS ;
 - `.env.example` : variables attendues ;
@@ -62,7 +61,6 @@ npm run dev
 Pages locales :
 
 - `http://localhost:5173/` : vitrine ;
-- `http://localhost:5173/demo` : dashboard de démonstration ;
 - `http://localhost:5173/app` : espace connecté.
 
 ## 3. GitHub
@@ -102,7 +100,6 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 La configuration `vercel.json` prévoit les routes :
 
 - `/` : vitrine ;
-- `/demo` : dashboard de démonstration ;
 - `/app` : application Supabase connectée.
 
 ## 5. Après le premier déploiement

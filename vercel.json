@@ -4,7 +4,6 @@
   "framework": "vite",
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/app", "destination": "/app.html" },
-    { "source": "/demo", "destination": "/dashboard.html" }
+    { "source": "/app", "destination": "/app.html" }
   ]
 }
