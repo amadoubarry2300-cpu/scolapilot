@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createClient } from '@supabase/supabase-js'
+import readXlsxFile from 'read-excel-file/browser'
 import './styles.css'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || import.meta.env.supabaseurl
@@ -17,6 +18,21 @@ const levelGroups = [
 const levelCategory = Object.fromEntries(levelGroups.flatMap(group => group.items.map(name => [name, group.category])))
 const initials = (name = '') => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'SP'
 const money = amount => `${Number(amount || 0).toLocaleString('fr-FR').replace(/\u202f/g, ' ')} FCFA`
+const normalizeHeader = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+function parseCsvText(text) {
+  const rows = []
+  let row = [], cell = '', quoted = false
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i], next = text[i + 1]
+    if (char === '"' && quoted && next === '"') { cell += '"'; i += 1 }
+    else if (char === '"') quoted = !quoted
+    else if ((char === ',' || char === ';' || char === '\\t') && !quoted) { row.push(cell.trim()); cell = '' }
+    else if ((char === '\\n' || char === '\\r') && !quoted) { if (char === '\\r' && next === '\\n') i += 1; row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); row = []; cell = '' }
+    else cell += char
+  }
+  row.push(cell.trim()); if (row.some(Boolean)) rows.push(row)
+  return rows
+}
 
 function App() {
   const [session, setSession] = useState(null)
@@ -42,6 +58,10 @@ function App() {
   const [paymentForm, setPaymentForm] = useState({ studentId: '', amount: '', method: 'cash', receiptNumber: '', note: '' })
   const [feeForm, setFeeForm] = useState({ studentId: '', label: 'Scolarité — tranche 1', amount: '', dueDate: '', discount: '' })
   const [guardianForm, setGuardianForm] = useState({ fullName: '', phone: '', whatsapp: '', email: '', relationship: 'Parent', studentId: '' })
+  const [importRows, setImportRows] = useState([])
+  const [importFileName, setImportFileName] = useState('')
+  const [importError, setImportError] = useState('')
+  const [importing, setImporting] = useState(false)
   const [studentSearch, setStudentSearch] = useState('')
   const [modal, setModal] = useState(null)
 
@@ -286,6 +306,63 @@ function App() {
     notify('Présences enregistrées.')
   }
 
+  async function handleImportFile(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setImportFileName(file.name)
+    setImportError('')
+    try {
+      const rawRows = file.name.toLowerCase().endsWith('.csv') ? parseCsvText(await file.text()) : await readXlsxFile(file)
+      if (!rawRows?.length) return setImportError('Le fichier est vide.')
+      const headers = rawRows[0].map(normalizeHeader)
+      const findColumn = names => headers.findIndex(header => names.includes(header))
+      const firstIndex = findColumn(['prenom', 'first_name', 'firstname', 'given_name'])
+      const lastIndex = findColumn(['nom', 'last_name', 'lastname', 'family_name'])
+      const numberIndex = findColumn(['matricule', 'student_number', 'numero', 'numero_eleve', 'id_eleve'])
+      const classIndex = findColumn(['classe', 'class', 'class_name'])
+      if (firstIndex < 0 || lastIndex < 0) return setImportError('Colonnes obligatoires introuvables. Utilise : prénom, nom, matricule, classe.')
+      const usedNumbers = new Set(students.map(student => String(student.student_number || '').toLowerCase()))
+      const seenNumbers = new Set()
+      const nextRows = rawRows.slice(1).map((values, index) => {
+        const firstName = String(values[firstIndex] ?? '').trim()
+        const lastName = String(values[lastIndex] ?? '').trim()
+        let studentNumber = numberIndex >= 0 ? String(values[numberIndex] ?? '').trim() : ''
+        if (!studentNumber) studentNumber = `SP-${new Date().getFullYear()}-${String(students.length + index + 1).padStart(4, '0')}`
+        const className = classIndex >= 0 ? String(values[classIndex] ?? '').trim() : ''
+        const foundClass = classes.find(item => item.name.toLowerCase() === className.toLowerCase())
+        let issue = ''
+        if (!firstName || !lastName) issue = 'Prénom ou nom manquant'
+        else if (usedNumbers.has(studentNumber.toLowerCase()) || seenNumbers.has(studentNumber.toLowerCase())) issue = 'Matricule déjà utilisé'
+        seenNumbers.add(studentNumber.toLowerCase())
+        return { firstName, lastName, studentNumber, className, classId: foundClass?.id || '', issue }
+      }).filter(row => row.firstName || row.lastName || row.studentNumber)
+      setImportRows(nextRows)
+      if (!nextRows.length) setImportError('Aucune ligne exploitable dans ce fichier.')
+    } catch (error) {
+      setImportError(`Lecture impossible : ${error.message || 'format non reconnu'}`)
+      setImportRows([])
+    }
+  }
+
+  async function importStudents() {
+    const validRows = importRows.filter(row => !row.issue)
+    if (!validRows.length) return notify('Aucune ligne valide à importer.')
+    setImporting(true)
+    const { data: years } = await supabase.from('academic_years').select('id').eq('school_id', school.id).eq('is_current', true).limit(1)
+    const year = years?.[0]
+    const { data: created, error } = await supabase.from('students').insert(validRows.map(row => ({ school_id: school.id, student_number: row.studentNumber, first_name: row.firstName, last_name: row.lastName }))).select()
+    if (error) { setImporting(false); return setImportError(error.message) }
+    const classRows = created.map(student => { const source = validRows.find(row => row.studentNumber === student.student_number); return source?.classId && year ? { school_id: school.id, student_id: student.id, class_id: source.classId, academic_year_id: year.id } : null }).filter(Boolean)
+    if (classRows.length) {
+      const { error: enrollmentError } = await supabase.from('enrollments').insert(classRows)
+      if (enrollmentError) { setImporting(false); return setImportError(`Élèves importés, mais affectation aux classes impossible : ${enrollmentError.message}`) }
+    }
+    setImporting(false)
+    setModal(null)
+    await loadSchoolData()
+    notify(`${created.length} élève(s) importé(s) avec succès.`)
+  }
+
   async function addGuardian(event) {
     event.preventDefault()
     if (!guardianForm.fullName.trim() || !guardianForm.phone.trim()) return notify('Le nom et le téléphone du parent sont obligatoires.')
@@ -324,7 +401,7 @@ function App() {
   if (!school) return <Onboarding user={session.user} form={onboarding} setForm={setOnboarding} message={authMessage} onSubmit={createSchool} loading={workspaceLoading} signOut={signOut} />
 
   const activeLevelCount = levels.length
-  const currentView = activeView === 'overview' ? <Overview school={school} students={students} classes={classes} levels={levels} payments={payments} onAddStudent={() => setModal('student')} onAddClass={() => setModal('class')} onAddPayment={() => setModal('payment')} /> : activeView === 'students' ? <Students students={filteredStudents} total={students.length} search={studentSearch} setSearch={setStudentSearch} onAdd={() => setModal('student')} classes={classes} /> : activeView === 'classes' ? <Classes levels={levels} classes={classes} onAdd={() => setModal('class')} /> : activeView === 'payments' ? <Payments payments={payments} students={students} onAdd={() => setModal('payment')} /> : activeView === 'fees' ? <Fees fees={fees} payments={payments} students={students} onAdd={() => setModal('fee')} /> : activeView === 'guardians' ? <Guardians guardians={guardians} students={students} onAdd={() => setModal('guardian')} /> : activeView === 'attendance' ? <Attendance students={students} records={attendanceRecords} date={attendanceDate} setDate={setAttendanceDate} toggle={toggleAttendance} save={saveAttendance} /> : <Settings school={school} levels={levels} classes={classes} />
+  const currentView = activeView === 'overview' ? <Overview school={school} students={students} classes={classes} levels={levels} payments={payments} onAddStudent={() => setModal('student')} onAddClass={() => setModal('class')} onAddPayment={() => setModal('payment')} /> : activeView === 'students' ? <Students students={filteredStudents} total={students.length} search={studentSearch} setSearch={setStudentSearch} onAdd={() => setModal('student')} onImport={() => { setImportRows([]); setImportFileName(''); setImportError(''); setModal('import') }} classes={classes} /> : activeView === 'classes' ? <Classes levels={levels} classes={classes} onAdd={() => setModal('class')} /> : activeView === 'payments' ? <Payments payments={payments} students={students} onAdd={() => setModal('payment')} /> : activeView === 'fees' ? <Fees fees={fees} payments={payments} students={students} onAdd={() => setModal('fee')} /> : activeView === 'guardians' ? <Guardians guardians={guardians} students={students} onAdd={() => setModal('guardian')} /> : activeView === 'attendance' ? <Attendance students={students} records={attendanceRecords} date={attendanceDate} setDate={setAttendanceDate} toggle={toggleAttendance} save={saveAttendance} /> : <Settings school={school} levels={levels} classes={classes} />
 
   return <div className="cloud-app">
     <aside className="cloud-sidebar">
@@ -347,6 +424,7 @@ function App() {
       <header className="cloud-topbar"><div><span className="crumb">ScolaPilot <b>›</b></span><strong>{activeView === 'overview' ? 'Vue d’ensemble' : activeView === 'students' ? 'Élèves' : activeView === 'classes' ? 'Niveaux & classes' : activeView === 'payments' ? 'Paiements' : activeView === 'fees' ? 'Frais & impayés' : activeView === 'guardians' ? 'Parents & tuteurs' : activeView === 'attendance' ? 'Présences' : 'Paramètres'}</strong></div><div className="top-actions"><span className="live"><i></i> Données en direct</span><span className="top-user">{initials(session.user.user_metadata?.full_name || session.user.email)}</span></div></header>
       <div className="cloud-content">{currentView}</div>
     </main>
+    {modal === 'import' && <Modal title="Importer des élèves" onClose={() => setModal(null)}><div className="import-modal"><p className="modal-intro">Importe un fichier Excel ou CSV avec les colonnes <b>prénom</b>, <b>nom</b>, <b>matricule</b> et <b>classe</b>. Les lignes incorrectes seront signalées avant l’enregistrement.</p><label className="upload-zone"><input type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} /><span className="upload-icon">↑</span><b>{importFileName || 'Choisir un fichier Excel ou CSV'}</b><small>Formats acceptés · .xlsx, .xls, .csv</small></label>{importError && <div className="import-error">{importError}</div>}{importRows.length > 0 && <><div className="import-summary"><span><b>{importRows.filter(row => !row.issue).length}</b> ligne(s) prêtes</span><span className={importRows.some(row => row.issue) ? 'has-errors' : ''}><b>{importRows.filter(row => row.issue).length}</b> erreur(s)</span></div><div className="import-preview"><table><thead><tr><th>Élève</th><th>Matricule</th><th>Classe</th><th>Contrôle</th></tr></thead><tbody>{importRows.slice(0, 80).map((row, index) => <tr key={`${row.studentNumber}-${index}`}><td>{row.firstName} {row.lastName}</td><td>{row.studentNumber}</td><td>{row.className || '—'}</td><td><span className={row.issue ? 'import-bad' : 'import-ok'}>{row.issue || 'OK'}</span></td></tr>)}</tbody></table></div>{importRows.length > 80 && <small className="import-more">Aperçu limité aux 80 premières lignes.</small>}</>}{importRows.length > 0 && <div className="modal-footer"><button type="button" className="light-btn" onClick={() => setModal(null)}>Annuler</button><button type="button" className="primary-btn" disabled={importing || !importRows.some(row => !row.issue)} onClick={importStudents}>{importing ? 'Import en cours…' : `Importer ${importRows.filter(row => !row.issue).length} élève(s)`}</button></div>}</div></Modal>}
     {modal === 'student' && <Modal title="Ajouter un élève" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addStudent}><div className="form-grid"><Field label="Prénom"><input required value={studentForm.firstName} onChange={e => setStudentForm({ ...studentForm, firstName: e.target.value })} placeholder="Ex. Aïcha" /></Field><Field label="Nom"><input required value={studentForm.lastName} onChange={e => setStudentForm({ ...studentForm, lastName: e.target.value })} placeholder="Ex. Ouédraogo" /></Field><Field label="Matricule"><input required value={studentForm.studentNumber} onChange={e => setStudentForm({ ...studentForm, studentNumber: e.target.value })} placeholder="Ex. SP-2026-0001" /></Field><Field label="Classe"><select value={studentForm.classId} onChange={e => setStudentForm({ ...studentForm, classId: e.target.value })}><option value="">À affecter plus tard</option>{classes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field></div><ModalFooter onClose={() => setModal(null)} submit="Ajouter l’élève" /></form></Modal>}
     {modal === 'payment' && <Modal title="Enregistrer un paiement" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addPayment}><div className="form-grid"><Field label="Élève"><select required value={paymentForm.studentId} onChange={e => setPaymentForm({ ...paymentForm, studentId: e.target.value })}><option value="">Choisir un élève</option>{students.map(item => <option key={item.id} value={item.id}>{item.first_name} {item.last_name}</option>)}</select></Field><Field label="Montant (FCFA)"><input required type="number" min="1" value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })} placeholder="75000" /></Field><Field label="Mode de paiement"><select value={paymentForm.method} onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}><option value="cash">Espèces</option><option value="orange_money">Orange Money</option><option value="moov_money">Moov Money</option><option value="telecel_money">Telecel Money</option><option value="bank_transfer">Virement</option><option value="cheque">Chèque</option></select></Field><Field label="N° de reçu"><input required value={paymentForm.receiptNumber} onChange={e => setPaymentForm({ ...paymentForm, receiptNumber: e.target.value })} placeholder="SP-0001" /></Field><Field label="Note"><input value={paymentForm.note} onChange={e => setPaymentForm({ ...paymentForm, note: e.target.value })} placeholder="Tranche 1, inscription..." /></Field></div><ModalFooter onClose={() => setModal(null)} submit="Enregistrer le paiement" /></form></Modal>}
     {modal === 'guardian' && <Modal title="Ajouter un parent / tuteur" onClose={() => setModal(null)}><form className="modal-form" onSubmit={addGuardian}><div className="form-grid"><Field label="Nom complet"><input required value={guardianForm.fullName} onChange={e => setGuardianForm({ ...guardianForm, fullName: e.target.value })} placeholder="Ex. Mariam Ouédraogo" /></Field><Field label="Téléphone"><input required value={guardianForm.phone} onChange={e => setGuardianForm({ ...guardianForm, phone: e.target.value })} placeholder="+226 70 00 00 00" /></Field><Field label="WhatsApp"><input value={guardianForm.whatsapp} onChange={e => setGuardianForm({ ...guardianForm, whatsapp: e.target.value })} placeholder="+226 ..." /></Field><Field label="Lien avec l’élève"><select value={guardianForm.relationship} onChange={e => setGuardianForm({ ...guardianForm, relationship: e.target.value })}><option>Parent</option><option>Père</option><option>Mère</option><option>Tuteur</option><option>Autre</option></select></Field><Field label="Rattacher à un élève"><select value={guardianForm.studentId} onChange={e => setGuardianForm({ ...guardianForm, studentId: e.target.value })}><option value="">Plus tard</option>{students.map(item => <option key={item.id} value={item.id}>{item.first_name} {item.last_name}</option>)}</select></Field><Field label="E-mail"><input type="email" value={guardianForm.email} onChange={e => setGuardianForm({ ...guardianForm, email: e.target.value })} placeholder="parent@email.com" /></Field></div><ModalFooter onClose={() => setModal(null)} submit="Ajouter le parent" /></form></Modal>}
@@ -372,7 +450,7 @@ function Overview({ school, students, classes, levels, payments, onAddStudent, o
   </>
 }
 
-function Students({ students, total, search, setSearch, onAdd, classes }) { return <><PageHeading eyebrow="Base élèves" title="Élèves" subtitle={`${total} élève${total > 1 ? 's' : ''} dans votre établissement.`} actions={<><button className="light-btn">↓ Exporter</button><button className="primary-btn" onClick={onAdd}>+ Ajouter un élève</button></>} /><div className="cloud-panel"><div className="table-toolbar"><div className="search"><span>⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom ou matricule..." /></div><span className="muted-count">{students.length} résultat{students.length > 1 ? 's' : ''}</span></div>{students.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Matricule</th><th>Statut</th><th></th></tr></thead><tbody>{students.map(student => <tr key={student.id}><td><div className="table-person"><span className="student-avatar">{initials(`${student.first_name} ${student.last_name}`)}</span><div><b>{student.first_name} {student.last_name}</b><small>Élève ScolaPilot</small></div></div></td><td>{student.student_number}</td><td><span className="active-pill">Actif</span></td><td><button className="row-menu">•••</button></td></tr>)}</tbody></table></div> : <EmptyState icon="⌕" title="Aucun résultat" text="Ajoutez un élève ou modifiez votre recherche." action="Ajouter un élève" onClick={onAdd} />}</div></> }
+function Students({ students, total, search, setSearch, onAdd, onImport, classes }) { return <><PageHeading eyebrow="Base élèves" title="Élèves" subtitle={`${total} élève${total > 1 ? 's' : ''} dans votre établissement.`} actions={<><button type="button" className="light-btn" onClick={onImport}>↑ Importer</button><button type="button" className="light-btn" onClick={() => { const rows = students.map(student => [student.student_number, student.first_name, student.last_name]); const csv = [['matricule', 'prénom', 'nom'], ...rows].map(row => row.map(cell => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(';')).join('\\n'); const url = URL.createObjectURL(new Blob([`\\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' })); const link = document.createElement('a'); link.href = url; link.download = 'eleves-scolapilot.csv'; link.click(); URL.revokeObjectURL(url) }}>↓ Exporter</button><button type="button" className="primary-btn" onClick={onAdd}>+ Ajouter un élève</button></>} /><div className="cloud-panel"><div className="table-toolbar"><div className="search"><span>⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom ou matricule..." /></div><span className="muted-count">{students.length} résultat{students.length > 1 ? 's' : ''}</span></div>{students.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Matricule</th><th>Statut</th><th></th></tr></thead><tbody>{students.map(student => <tr key={student.id}><td><div className="table-person"><span className="student-avatar">{initials(`${student.first_name} ${student.last_name}`)}</span><div><b>{student.first_name} {student.last_name}</b><small>Élève ScolaPilot</small></div></div></td><td>{student.student_number}</td><td><span className="active-pill">Actif</span></td><td><button className="row-menu">•••</button></td></tr>)}</tbody></table></div> : <EmptyState icon="⌕" title="Aucun résultat" text="Ajoutez un élève ou modifiez votre recherche." action="Ajouter un élève" onClick={onAdd} />}</div></> }
 
 function Attendance({ students, records, date, setDate, toggle, save }) {
   const presentCount = students.filter(student => (records.find(item => item.student_id === student.id)?.status || 'present') === 'present').length
