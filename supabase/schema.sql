@@ -157,6 +157,42 @@ create table if not exists public.attendance_records (
   unique (student_id, attendance_date)
 );
 
+create table if not exists public.subjects (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references public.schools(id) on delete cascade,
+  level_id uuid references public.levels(id) on delete set null,
+  name text not null,
+  code text,
+  coefficient numeric(5,2) not null default 1 check (coefficient > 0),
+  created_at timestamptz not null default now(),
+  unique (school_id, name)
+);
+
+create table if not exists public.assessments (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references public.schools(id) on delete cascade,
+  subject_id uuid not null references public.subjects(id) on delete cascade,
+  class_id uuid references public.classes(id) on delete set null,
+  title text not null,
+  term text not null default 'Trimestre 1' check (term in ('Trimestre 1','Trimestre 2','Trimestre 3','Semestre 1','Semestre 2')),
+  max_score numeric(6,2) not null default 20 check (max_score > 0),
+  assessment_date date not null default current_date,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.grades (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references public.schools(id) on delete cascade,
+  assessment_id uuid not null references public.assessments(id) on delete cascade,
+  student_id uuid not null references public.students(id) on delete cascade,
+  score numeric(6,2) check (score >= 0),
+  comment text,
+  created_by uuid references auth.users(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  unique (assessment_id, student_id)
+);
+
 create table if not exists public.audit_logs (
   id uuid primary key default gen_random_uuid(),
   school_id uuid not null references public.schools(id) on delete cascade,
@@ -176,6 +212,8 @@ create index if not exists idx_enrollments_class on public.enrollments(school_id
 create index if not exists idx_payments_school_date on public.payments(school_id, paid_at desc);
 create index if not exists idx_payments_student on public.payments(student_id);
 create index if not exists idx_attendance_class_date on public.attendance_records(school_id, class_id, attendance_date);
+create index if not exists idx_assessments_class_term on public.assessments(school_id, class_id, term);
+create index if not exists idx_grades_student on public.grades(school_id, student_id);
 
 -- Fonctions de sécurité RLS
 create or replace function public.is_school_member(target_school_id uuid)
@@ -274,6 +312,9 @@ alter table public.enrollments enable row level security;
 alter table public.fee_assignments enable row level security;
 alter table public.payments enable row level security;
 alter table public.attendance_records enable row level security;
+alter table public.subjects enable row level security;
+alter table public.assessments enable row level security;
+alter table public.grades enable row level security;
 alter table public.audit_logs enable row level security;
 
 -- Profiles : chaque utilisateur ne lit et ne modifie que son profil.
@@ -306,6 +347,9 @@ create policy enrollments_member on public.enrollments for all using (public.is_
 create policy fee_assignments_member on public.fee_assignments for all using (public.is_school_member(school_id)) with check (public.is_school_member(school_id));
 create policy payments_member on public.payments for all using (public.is_school_member(school_id)) with check (public.is_school_member(school_id));
 create policy attendance_member on public.attendance_records for all using (public.is_school_member(school_id)) with check (public.is_school_member(school_id));
+create policy subjects_member on public.subjects for all using (public.is_school_member(school_id)) with check (public.is_school_member(school_id));
+create policy assessments_member on public.assessments for all using (public.is_school_member(school_id)) with check (public.is_school_member(school_id));
+create policy grades_member on public.grades for all using (public.is_school_member(school_id)) with check (public.is_school_member(school_id));
 create policy audit_logs_member on public.audit_logs for select using (public.is_school_member(school_id));
 create policy audit_logs_insert_member on public.audit_logs for insert with check (public.is_school_member(school_id));
 
