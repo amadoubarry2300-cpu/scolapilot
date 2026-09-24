@@ -156,27 +156,38 @@ function App() {
     const activeMembership = memberships.find(item => item.school_id === active?.id)
     setMemberRole(activeMembership?.role || 'teacher')
     setSchool(active)
-    await loadSchoolData(active)
+    await loadSchoolData(active, activeMembership?.role)
     setWorkspaceLoading(false)
   }
 
-  async function loadSchoolData(activeSchool = school) {
+  async function loadSchoolData(activeSchool = school, roleOverride = memberRole) {
     if (!activeSchool) return
+    const currentRole = roleOverride || memberRole || 'teacher'
+    const canFinance = ['owner', 'director', 'accountant'].includes(currentRole)
+    const canAcademic = ['owner', 'director', 'teacher'].includes(currentRole)
+    const canTeam = ['owner', 'director'].includes(currentRole)
+    const financePaymentsQuery = canFinance ? supabase.from('payments').select('*').eq('school_id', activeSchool.id).order('paid_at', { ascending: false }) : Promise.resolve({ data: [], error: null })
+    const financeFeesQuery = canFinance ? supabase.from('fee_assignments').select('*').eq('school_id', activeSchool.id).order('due_date') : Promise.resolve({ data: [], error: null })
+    const subjectsQuery = canAcademic ? supabase.from('subjects').select('*').eq('school_id', activeSchool.id).order('name') : Promise.resolve({ data: [], error: null })
+    const assessmentsQuery = canAcademic ? supabase.from('assessments').select('*').eq('school_id', activeSchool.id).order('assessment_date', { ascending: false }) : Promise.resolve({ data: [], error: null })
+    const gradesQuery = canAcademic ? supabase.from('grades').select('*').eq('school_id', activeSchool.id).order('updated_at', { ascending: false }) : Promise.resolve({ data: [], error: null })
+    const invitationsQuery = canTeam ? supabase.from('school_invitations').select('id, email, role, token, expires_at, accepted_at, created_at').eq('school_id', activeSchool.id).order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null })
+    const auditQuery = canTeam ? supabase.from('audit_logs').select('id, action, entity, metadata, created_at, user_id').eq('school_id', activeSchool.id).order('created_at', { ascending: false }).limit(50) : Promise.resolve({ data: [], error: null })
     const [{ data: nextLevels, error: levelError }, { data: nextClasses, error: classError }, { data: nextEnrollments, error: enrollmentError }, { data: nextStudents, error: studentError }, { data: nextSubjects, error: subjectError }, { data: nextAssessments, error: assessmentError }, { data: nextGrades, error: gradeError }, { data: nextGuardians, error: guardianError }, { data: nextPayments, error: paymentError }, { data: nextFees, error: feeError }, { data: nextAttendance, error: attendanceError }, { data: nextMembers, error: memberError }, { data: nextInvitations, error: invitationError }, { data: nextAuditLogs, error: auditError }] = await Promise.all([
       supabase.from('levels').select('*').eq('school_id', activeSchool.id).order('sort_order'),
       supabase.from('classes').select('id, name, section, level_id, academic_year_id').eq('school_id', activeSchool.id).order('name'),
       supabase.from('enrollments').select('id, student_id, class_id, academic_year_id, status').eq('school_id', activeSchool.id).eq('status', 'active'),
       supabase.from('students').select('*').eq('school_id', activeSchool.id).order('created_at', { ascending: false }),
-      supabase.from('subjects').select('*').eq('school_id', activeSchool.id).order('name'),
-      supabase.from('assessments').select('*').eq('school_id', activeSchool.id).order('assessment_date', { ascending: false }),
-      supabase.from('grades').select('*').eq('school_id', activeSchool.id).order('updated_at', { ascending: false }),
+      subjectsQuery,
+      assessmentsQuery,
+      gradesQuery,
       supabase.from('guardians').select('*').eq('school_id', activeSchool.id).order('created_at', { ascending: false }),
-      supabase.from('payments').select('*').eq('school_id', activeSchool.id).order('paid_at', { ascending: false }),
-      supabase.from('fee_assignments').select('*').eq('school_id', activeSchool.id).order('due_date'),
+      financePaymentsQuery,
+      financeFeesQuery,
       supabase.from('attendance_records').select('*').eq('school_id', activeSchool.id).eq('attendance_date', attendanceDate),
       supabase.from('school_members').select('id, user_id, role, created_at').eq('school_id', activeSchool.id).order('created_at'),
-      supabase.from('school_invitations').select('id, email, role, token, expires_at, accepted_at, created_at').eq('school_id', activeSchool.id).order('created_at', { ascending: false }),
-      supabase.from('audit_logs').select('id, action, entity, metadata, created_at, user_id').eq('school_id', activeSchool.id).order('created_at', { ascending: false }).limit(50),
+      invitationsQuery,
+      auditQuery,
     ])
     if (levelError || classError || enrollmentError || studentError || guardianError || paymentError || feeError || attendanceError) {
       notify(levelError?.message || classError?.message || enrollmentError?.message || studentError?.message || guardianError?.message || paymentError?.message || feeError?.message || attendanceError?.message)
