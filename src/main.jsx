@@ -54,6 +54,8 @@ function App() {
   const [assessments, setAssessments] = useState([])
   const [grades, setGrades] = useState([])
   const [guardians, setGuardians] = useState([])
+  const [studentGuardians, setStudentGuardians] = useState([])
+  const [communicationLogs, setCommunicationLogs] = useState([])
   const [payments, setPayments] = useState([])
   const [fees, setFees] = useState([])
   const [attendanceRecords, setAttendanceRecords] = useState([])
@@ -115,6 +117,8 @@ function App() {
       setAssessments([])
       setGrades([])
       setGuardians([])
+      setStudentGuardians([])
+      setCommunicationLogs([])
       setPayments([])
       setFees([])
       setAttendanceRecords([])
@@ -173,7 +177,7 @@ function App() {
     const gradesQuery = canAcademic ? supabase.from('grades').select('*').eq('school_id', activeSchool.id).order('updated_at', { ascending: false }) : Promise.resolve({ data: [], error: null })
     const invitationsQuery = canTeam ? supabase.from('school_invitations').select('id, email, role, token, expires_at, accepted_at, created_at').eq('school_id', activeSchool.id).order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null })
     const auditQuery = canTeam ? supabase.from('audit_logs').select('id, action, entity, metadata, created_at, user_id').eq('school_id', activeSchool.id).order('created_at', { ascending: false }).limit(50) : Promise.resolve({ data: [], error: null })
-    const [{ data: nextLevels, error: levelError }, { data: nextClasses, error: classError }, { data: nextEnrollments, error: enrollmentError }, { data: nextStudents, error: studentError }, { data: nextSubjects, error: subjectError }, { data: nextAssessments, error: assessmentError }, { data: nextGrades, error: gradeError }, { data: nextGuardians, error: guardianError }, { data: nextPayments, error: paymentError }, { data: nextFees, error: feeError }, { data: nextAttendance, error: attendanceError }, { data: nextMembers, error: memberError }, { data: nextInvitations, error: invitationError }, { data: nextAuditLogs, error: auditError }] = await Promise.all([
+    const [{ data: nextLevels, error: levelError }, { data: nextClasses, error: classError }, { data: nextEnrollments, error: enrollmentError }, { data: nextStudents, error: studentError }, { data: nextSubjects, error: subjectError }, { data: nextAssessments, error: assessmentError }, { data: nextGrades, error: gradeError }, { data: nextGuardians, error: guardianError }, { data: nextPayments, error: paymentError }, { data: nextFees, error: feeError }, { data: nextAttendance, error: attendanceError }, { data: nextMembers, error: memberError }, { data: nextInvitations, error: invitationError }, { data: nextAuditLogs, error: auditError }, { data: nextStudentGuardians, error: studentGuardianError }, { data: nextCommunicationLogs, error: communicationError }] = await Promise.all([
       supabase.from('levels').select('*').eq('school_id', activeSchool.id).order('sort_order'),
       supabase.from('classes').select('id, name, section, level_id, academic_year_id').eq('school_id', activeSchool.id).order('name'),
       supabase.from('enrollments').select('id, student_id, class_id, academic_year_id, status').eq('school_id', activeSchool.id).eq('status', 'active'),
@@ -188,6 +192,8 @@ function App() {
       supabase.from('school_members').select('id, user_id, role, created_at').eq('school_id', activeSchool.id).order('created_at'),
       invitationsQuery,
       auditQuery,
+      supabase.from('student_guardians').select('student_id, guardian_id, relationship, is_primary'),
+      supabase.from('communication_logs').select('id, student_id, guardian_id, channel, message, status, sent_at, created_at').eq('school_id', activeSchool.id).order('created_at', { ascending: false }).limit(100),
     ])
     if (levelError || classError || enrollmentError || studentError || guardianError || paymentError || feeError || attendanceError) {
       notify(levelError?.message || classError?.message || enrollmentError?.message || studentError?.message || guardianError?.message || paymentError?.message || feeError?.message || attendanceError?.message)
@@ -207,6 +213,8 @@ function App() {
     setMembers(nextMembers || [])
     setInvitations(nextInvitations || [])
     setAuditLogs(nextAuditLogs || [])
+    setStudentGuardians(nextStudentGuardians || [])
+    setCommunicationLogs(nextCommunicationLogs || [])
     setPaymentForm(form => ({ ...form, studentId: form.studentId || nextStudents?.[0]?.id || '', receiptNumber: form.receiptNumber || `SP-${String((nextPayments?.length || 0) + 1).padStart(4, '0')}` }))
     setFeeForm(form => ({ ...form, studentId: form.studentId || nextStudents?.[0]?.id || '' }))
     setStudentForm(form => ({ ...form, classId: form.classId || nextClasses?.[0]?.id || '' }))
@@ -468,6 +476,13 @@ function App() {
     notify('Notes enregistrées.')
   }
 
+  async function recordCommunication({ studentId, guardianId, message, phone }) {
+    const { error } = await supabase.from('communication_logs').insert({ school_id: school.id, student_id: studentId, guardian_id: guardianId || null, channel: 'whatsapp', message, status: 'opened', sent_at: new Date().toISOString(), created_by: session.user.id })
+    if (error) return notify(error.message)
+    await writeAudit('send', 'communication', null, { channel: 'whatsapp', student_id: studentId })
+    setCommunicationLogs(current => [{ id: crypto.randomUUID(), student_id: studentId, guardian_id: guardianId, channel: 'whatsapp', message, status: 'opened', sent_at: new Date().toISOString(), created_at: new Date().toISOString() }, ...current])
+  }
+
   async function createInvitation(event) {
     event.preventDefault()
     const email = teamForm.email.trim().toLowerCase()
@@ -590,10 +605,10 @@ function App() {
   }, [students, studentSearch])
 
   const accessMap = {
-    owner: ['overview', 'students', 'classes', 'payments', 'fees', 'guardians', 'attendance', 'grades', 'team', 'reports', 'settings'],
-    director: ['overview', 'students', 'classes', 'payments', 'fees', 'guardians', 'attendance', 'grades', 'team', 'reports', 'settings'],
-    accountant: ['overview', 'students', 'payments', 'fees', 'guardians'],
-    secretary: ['overview', 'students', 'classes', 'guardians', 'attendance'],
+    owner: ['overview', 'students', 'classes', 'payments', 'fees', 'guardians', 'attendance', 'grades', 'team', 'reports', 'communication', 'settings'],
+    director: ['overview', 'students', 'classes', 'payments', 'fees', 'guardians', 'attendance', 'grades', 'team', 'reports', 'communication', 'settings'],
+    accountant: ['overview', 'students', 'payments', 'fees', 'guardians', 'communication'],
+    secretary: ['overview', 'students', 'classes', 'guardians', 'attendance', 'communication'],
     teacher: ['overview', 'students', 'attendance', 'grades'],
   }
   const canAccess = view => (accessMap[memberRole] || accessMap.teacher).includes(view)
@@ -608,7 +623,7 @@ function App() {
   if (!school) return <Onboarding user={session.user} form={onboarding} setForm={setOnboarding} message={authMessage} onSubmit={createSchool} loading={workspaceLoading} signOut={signOut} />
 
   const activeLevelCount = levels.length
-  const currentView = activeView === 'overview' ? <Overview school={school} students={students} classes={classes} levels={levels} payments={payments} onAddStudent={() => setModal('student')} onAddClass={() => setModal('class')} onAddPayment={() => setModal('payment')} /> : activeView === 'students' ? <Students students={filteredStudents} total={students.length} search={studentSearch} setSearch={setStudentSearch} onAdd={() => setModal('student')} onImport={() => { setImportRows([]); setImportFileName(''); setImportError(''); setModal('import') }} classes={classes} /> : activeView === 'classes' ? <Classes levels={levels} classes={classes} onAdd={() => setModal('class')} /> : activeView === 'payments' ? <Payments payments={payments} students={students} onAdd={() => setModal('payment')} /> : activeView === 'fees' ? <Fees fees={fees} payments={payments} students={students} onAdd={() => setModal('fee')} /> : activeView === 'guardians' ? <Guardians guardians={guardians} students={students} onAdd={() => setModal('guardian')} onImport={() => { setGuardianImportRows([]); setGuardianImportFileName(''); setGuardianImportError(''); setModal('guardian-import') }} /> : activeView === 'attendance' ? <Attendance students={students} records={attendanceRecords} date={attendanceDate} setDate={setAttendanceDate} toggle={toggleAttendance} save={saveAttendance} /> : activeView === 'grades' ? <Grades subjects={subjects} assessments={assessments} grades={grades} students={students} classes={classes} enrollments={enrollments} selectedId={selectedAssessmentId} setSelectedId={setSelectedAssessmentId} scoreDrafts={scoreDrafts} setScoreDrafts={setScoreDrafts} onSubject={() => setModal('subject')} onAssessment={() => setModal('assessment')} onSave={saveGrades} /> : activeView === 'team' ? <Team members={members} invitations={invitations} auditLogs={auditLogs} inviteLink={inviteLink} onAdd={() => { setInviteLink(''); setModal('team') }} /> : activeView === 'reports' ? <Reports school={school} payments={payments} fees={fees} students={students} classes={classes} enrollments={enrollments} attendanceRecords={attendanceRecords} grades={grades} assessments={assessments} /> : <Settings school={school} levels={levels} classes={classes} />
+  const currentView = activeView === 'overview' ? <Overview school={school} students={students} classes={classes} levels={levels} payments={payments} onAddStudent={() => setModal('student')} onAddClass={() => setModal('class')} onAddPayment={() => setModal('payment')} /> : activeView === 'students' ? <Students students={filteredStudents} total={students.length} search={studentSearch} setSearch={setStudentSearch} onAdd={() => setModal('student')} onImport={() => { setImportRows([]); setImportFileName(''); setImportError(''); setModal('import') }} classes={classes} /> : activeView === 'classes' ? <Classes levels={levels} classes={classes} onAdd={() => setModal('class')} /> : activeView === 'payments' ? <Payments payments={payments} students={students} onAdd={() => setModal('payment')} /> : activeView === 'fees' ? <Fees fees={fees} payments={payments} students={students} onAdd={() => setModal('fee')} /> : activeView === 'guardians' ? <Guardians guardians={guardians} students={students} onAdd={() => setModal('guardian')} onImport={() => { setGuardianImportRows([]); setGuardianImportFileName(''); setGuardianImportError(''); setModal('guardian-import') }} /> : activeView === 'attendance' ? <Attendance students={students} records={attendanceRecords} date={attendanceDate} setDate={setAttendanceDate} toggle={toggleAttendance} save={saveAttendance} /> : activeView === 'grades' ? <Grades subjects={subjects} assessments={assessments} grades={grades} students={students} classes={classes} enrollments={enrollments} selectedId={selectedAssessmentId} setSelectedId={setSelectedAssessmentId} scoreDrafts={scoreDrafts} setScoreDrafts={setScoreDrafts} onSubject={() => setModal('subject')} onAssessment={() => setModal('assessment')} onSave={saveGrades} /> : activeView === 'team' ? <Team members={members} invitations={invitations} auditLogs={auditLogs} inviteLink={inviteLink} onAdd={() => { setInviteLink(''); setModal('team') }} /> : activeView === 'reports' ? <Reports school={school} payments={payments} fees={fees} students={students} classes={classes} enrollments={enrollments} attendanceRecords={attendanceRecords} grades={grades} assessments={assessments} /> : activeView === 'communication' ? <Communication students={students} guardians={guardians} links={studentGuardians} fees={fees} payments={payments} logs={communicationLogs} onSend={recordCommunication} /> : <Settings school={school} levels={levels} classes={classes} />
 
   return <div className="cloud-app">
     <aside className="cloud-sidebar">
@@ -626,12 +641,13 @@ function App() {
         {canAccess('grades') && <NavButton active={activeView === 'grades'} icon="⌁" label="Notes & bulletins" onClick={() => setActiveView('grades')} count={assessments.length} />}
         {canAccess('team') && <NavButton active={activeView === 'team'} icon="♧" label="Équipe" onClick={() => setActiveView('team')} count={members.length} />}
         {canAccess('reports') && <NavButton active={activeView === 'reports'} icon="▤" label="Rapports" onClick={() => setActiveView('reports')} />}
+        {canAccess('communication') && <NavButton active={activeView === 'communication'} icon="⌁" label="Communication" onClick={() => setActiveView('communication')} count={communicationLogs.length} />}
         {canAccess('settings') && <NavButton active={activeView === 'settings'} icon="⚙" label="Paramètres" onClick={() => setActiveView('settings')} />}
       </div>
       <div className="cloud-sidebar-bottom"><div className="cloud-help"><strong>Besoin d’aide ?</strong><p>Votre espace est sécurisé par Supabase.</p><a href="/#demo">Contacter l’équipe →</a></div><button className="cloud-user" onClick={signOut}><span className="user-avatar">{initials(session.user.user_metadata?.full_name || session.user.email)}</span><span><b>{session.user.user_metadata?.full_name || session.user.email}</b><small>Se déconnecter</small></span><i>↗</i></button></div>
     </aside>
     <main className="cloud-main">
-      <header className="cloud-topbar"><div><span className="crumb">ScolaPilot <b>›</b></span><strong>{activeView === 'overview' ? 'Vue d’ensemble' : activeView === 'students' ? 'Élèves' : activeView === 'classes' ? 'Niveaux & classes' : activeView === 'payments' ? 'Paiements' : activeView === 'fees' ? 'Frais & impayés' : activeView === 'guardians' ? 'Parents & tuteurs' : activeView === 'attendance' ? 'Présences' : activeView === 'grades' ? 'Notes & bulletins' : activeView === 'team' ? 'Équipe & accès' : activeView === 'reports' ? 'Rapports direction' : 'Paramètres'}</strong></div><div className="top-actions"><span className="live"><i></i> Données en direct</span><span className="top-user">{initials(session.user.user_metadata?.full_name || session.user.email)}</span></div></header>
+      <header className="cloud-topbar"><div><span className="crumb">ScolaPilot <b>›</b></span><strong>{activeView === 'overview' ? 'Vue d’ensemble' : activeView === 'students' ? 'Élèves' : activeView === 'classes' ? 'Niveaux & classes' : activeView === 'payments' ? 'Paiements' : activeView === 'fees' ? 'Frais & impayés' : activeView === 'guardians' ? 'Parents & tuteurs' : activeView === 'attendance' ? 'Présences' : activeView === 'grades' ? 'Notes & bulletins' : activeView === 'team' ? 'Équipe & accès' : activeView === 'reports' ? 'Rapports direction' : activeView === 'communication' ? 'Communication famille' : 'Paramètres'}</strong></div><div className="top-actions"><span className="live"><i></i> Données en direct</span><span className="top-user">{initials(session.user.user_metadata?.full_name || session.user.email)}</span></div></header>
       <div className="cloud-content">{currentView}</div>
     </main>
     {modal === 'team' && <Modal title="Inviter un collaborateur" onClose={() => setModal(null)}><form className="modal-form" onSubmit={createInvitation}><p className="modal-intro">L’invitation crée un lien sécurisé à partager par WhatsApp ou e-mail. Le collaborateur devra se connecter avec la même adresse.</p><div className="form-grid"><Field label="Adresse e-mail"><input required type="email" value={teamForm.email} onChange={e => setTeamForm({ ...teamForm, email: e.target.value })} placeholder="comptable@ecole.com" /></Field><Field label="Rôle"><select value={teamForm.role} onChange={e => setTeamForm({ ...teamForm, role: e.target.value })}><option value="director">Directeur</option><option value="accountant">Comptable</option><option value="secretary">Secrétaire</option><option value="teacher">Enseignant</option></select></Field></div><ModalFooter onClose={() => setModal(null)} submit="Créer l’invitation" /></form></Modal>}
@@ -665,6 +681,21 @@ function Overview({ school, students, classes, levels, payments, onAddStudent, o
 }
 
 function Students({ students, total, search, setSearch, onAdd, onImport, classes }) { return <><PageHeading eyebrow="Base élèves" title="Élèves" subtitle={`${total} élève${total > 1 ? 's' : ''} dans votre établissement.`} actions={<><button type="button" className="light-btn" onClick={onImport}>↑ Importer</button><button type="button" className="light-btn" onClick={() => { const rows = students.map(student => [student.student_number, student.first_name, student.last_name]); const csv = [['matricule', 'prénom', 'nom'], ...rows].map(row => row.map(cell => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(';')).join('\\n'); const url = URL.createObjectURL(new Blob([`\\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' })); const link = document.createElement('a'); link.href = url; link.download = 'eleves-scolapilot.csv'; link.click(); URL.revokeObjectURL(url) }}>↓ Exporter</button><button type="button" className="primary-btn" onClick={onAdd}>+ Ajouter un élève</button></>} /><div className="cloud-panel"><div className="table-toolbar"><div className="search"><span>⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom ou matricule..." /></div><span className="muted-count">{students.length} résultat{students.length > 1 ? 's' : ''}</span></div>{students.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Matricule</th><th>Statut</th><th></th></tr></thead><tbody>{students.map(student => <tr key={student.id}><td><div className="table-person"><span className="student-avatar">{initials(`${student.first_name} ${student.last_name}`)}</span><div><b>{student.first_name} {student.last_name}</b><small>Élève ScolaPilot</small></div></div></td><td>{student.student_number}</td><td><span className="active-pill">Actif</span></td><td><button className="row-menu">•••</button></td></tr>)}</tbody></table></div> : <EmptyState icon="⌕" title="Aucun résultat" text="Ajoutez un élève ou modifiez votre recherche." action="Ajouter un élève" onClick={onAdd} />}</div></> }
+
+function Communication({ students, guardians, links, fees, payments, logs, onSend }) {
+  const [template, setTemplate] = useState('Bonjour, nous vous informons que le solde scolaire de {eleve} est de {solde}. Merci de contacter l’administration de l’école pour régulariser la situation.')
+  const normalizePhone = phone => { const digits = String(phone || '').replace(/\\D/g, ''); if (digits.startsWith('226')) return digits; if (digits.startsWith('0')) return `226${digits.slice(1)}`; return digits.length === 8 ? `226${digits}` : digits }
+  const rows = students.map(student => {
+    const due = fees.filter(fee => fee.student_id === student.id).reduce((sum, fee) => sum + Number(fee.amount || 0) - Number(fee.discount || 0), 0)
+    const paid = payments.filter(payment => payment.student_id === student.id).reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+    const balance = Math.max(due - paid, 0)
+    const link = links.find(item => item.student_id === student.id && item.is_primary) || links.find(item => item.student_id === student.id)
+    const guardian = guardians.find(item => item.id === link?.guardian_id)
+    return { student, balance, link, guardian, phone: guardian?.whatsapp || guardian?.phone || '' }
+  }).filter(row => row.balance > 0).sort((a, b) => b.balance - a.balance)
+  const sendMessage = row => { const message = template.replaceAll('{eleve}', `${row.student.first_name} ${row.student.last_name}`).replaceAll('{solde}', money(row.balance)); const phone = normalizePhone(row.phone); if (!phone) return; window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank'); onSend({ studentId: row.student.id, guardianId: row.guardian?.id, message, phone }) }
+  return <><PageHeading eyebrow="Relation familles" title="Communication" subtitle="Relancez les familles avec un message clair, traçable et adapté au contexte local." actions={<button type="button" className="primary-btn" onClick={() => rows.filter(row => row.phone).slice(0, 1).forEach(sendMessage)}>↗ Tester WhatsApp</button>} /><div className="cloud-kpis"><Metric icon="!" label="Familles à relancer" value={rows.length} note="Solde supérieur à zéro"/><Metric icon="↗" label="Montant concerné" value={money(rows.reduce((sum, row) => sum + row.balance, 0))} note="Impayés"/><Metric icon="☎" label="Contacts disponibles" value={rows.filter(row => row.phone).length} note="WhatsApp ou téléphone"/><Metric icon="✓" label="Relances ouvertes" value={logs.length} note="Historique"/></div><div className="cloud-panel message-template"><div className="panel-heading"><div><h2>Modèle de message WhatsApp</h2><p>Utilise les variables <b>{'{eleve}'}</b> et <b>{'{solde}'}</b> pour personnaliser automatiquement.</p></div></div><textarea value={template} onChange={e => setTemplate(e.target.value)} /><small>Le message s’ouvre dans WhatsApp avant envoi : tu gardes le contrôle de chaque relance.</small></div><div className="cloud-panel"><div className="panel-heading"><div><h2>Familles à relancer</h2><p>Les soldes sont calculés à partir des frais et paiements enregistrés.</p></div><span className="count-badge">{rows.length} dossier(s)</span></div>{rows.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Parent</th><th>Solde</th><th>Contact</th><th></th></tr></thead><tbody>{rows.map(row => <tr key={row.student.id}><td><div className="table-person"><span className="student-avatar">{initials(`${row.student.first_name} ${row.student.last_name}`)}</span><div><b>{row.student.first_name} {row.student.last_name}</b><small>{row.student.student_number}</small></div></div></td><td>{row.guardian?.full_name || 'Parent non rattaché'}</td><td><b>{money(row.balance)}</b></td><td>{row.phone || 'Téléphone manquant'}</td><td><button type="button" className="light-btn" disabled={!row.phone} onClick={() => sendMessage(row)}>WhatsApp ↗</button></td></tr>)}</tbody></table></div> : <EmptyState icon="✓" title="Aucune relance nécessaire" text="Les familles avec un solde impayé apparaîtront automatiquement ici." action="Voir les rapports" onClick={() => {}} />}</div><div className="cloud-panel"><div className="panel-heading"><div><h2>Historique des relances</h2><p>Dernières ouvertures WhatsApp enregistrées.</p></div></div>{logs.length ? <div className="simple-list">{logs.slice(0, 10).map(log => <div className="simple-row" key={log.id}><span className="class-icon">↗</span><div><b>{log.channel === 'whatsapp' ? 'WhatsApp' : log.channel}</b><small>{log.message.slice(0, 95)}{log.message.length > 95 ? '…' : ''}</small></div><span className="active-pill">Ouvert</span></div>)}</div> : <EmptyState icon="⌁" title="Aucune relance envoyée" text="Les relances confirmées apparaîtront dans cet historique." action="Voir les familles" onClick={() => {}} />}</div></>
+}
 
 function Reports({ school, payments, fees, students, classes, enrollments, attendanceRecords, grades, assessments }) {
   const collected = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)

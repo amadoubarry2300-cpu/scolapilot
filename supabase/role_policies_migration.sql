@@ -80,3 +80,9 @@ create policy audit_logs_insert_member on public.audit_logs for insert with chec
 -- Équipe et invitations : gestion par propriétaire/directeur.
 create policy school_invitations_select_director on public.school_invitations for select using (public.has_school_role(school_id, array['owner','director']));
 create policy school_invitations_insert_director on public.school_invitations for insert with check (public.has_school_role(school_id, array['owner','director']) and invited_by = auth.uid());
+
+-- Communication famille : secrétariat, comptabilité et direction.
+drop policy if exists communication_select_member on public.communication_logs;
+drop policy if exists communication_insert_member on public.communication_logs;
+create policy communication_select_role on public.communication_logs for select using (public.has_school_role(school_id, array['owner','director','accountant','secretary']));
+create policy communication_insert_role on public.communication_logs for insert with check (public.has_school_role(school_id, array['owner','director','accountant','secretary']) and created_by = auth.uid());
