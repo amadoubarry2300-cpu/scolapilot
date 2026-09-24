@@ -42,6 +42,8 @@ function App() {
   const [authMessage, setAuthMessage] = useState('')
   const [workspaceLoading, setWorkspaceLoading] = useState(false)
   const [school, setSchool] = useState(null)
+  const [parentSchool, setParentSchool] = useState(null)
+  const [parentGuardian, setParentGuardian] = useState(null)
   const [levels, setLevels] = useState([])
   const [classes, setClasses] = useState([])
   const [enrollments, setEnrollments] = useState([])
@@ -105,6 +107,8 @@ function App() {
     if (session?.user) loadWorkspace(session.user)
     else {
       setSchool(null)
+      setParentSchool(null)
+      setParentGuardian(null)
       setLevels([])
       setClasses([])
       setEnrollments([])
@@ -145,7 +149,15 @@ function App() {
       return
     }
     if (!memberships?.length) {
+      const { data: claimedGuardianId } = await supabase.rpc('claim_guardian_account')
+      if (claimedGuardianId) {
+        await loadParentWorkspace(claimedGuardianId)
+        setWorkspaceLoading(false)
+        return
+      }
       setSchool(null)
+      setParentSchool(null)
+      setParentGuardian(null)
       setWorkspaceLoading(false)
       return
     }
@@ -162,6 +174,25 @@ function App() {
     setSchool(active)
     await loadSchoolData(active, activeMembership?.role)
     setWorkspaceLoading(false)
+  }
+
+  async function loadParentWorkspace(guardianId) {
+    const { data: guardian, error: guardianError } = await supabase.from('guardians').select('*').eq('id', guardianId).single()
+    if (guardianError || !guardian) return
+    const { data: linkedStudents } = await supabase.from('student_guardians').select('student_id').eq('guardian_id', guardian.id)
+    const studentIds = (linkedStudents || []).map(item => item.student_id)
+    const [{ data: nextStudents }, { data: nextFees }, { data: nextPayments }, { data: nextAttendance }, { data: nextGrades }, { data: nextAssessments }, { data: nextSubjects }, { data: parentSchoolData }] = await Promise.all([
+      supabase.from('students').select('*').in('id', studentIds).order('last_name'),
+      supabase.from('fee_assignments').select('*').in('student_id', studentIds).order('due_date'),
+      supabase.from('payments').select('*').in('student_id', studentIds).order('paid_at', { ascending: false }),
+      supabase.from('attendance_records').select('*').in('student_id', studentIds).order('attendance_date', { ascending: false }).limit(100),
+      supabase.from('grades').select('*').in('student_id', studentIds),
+      supabase.from('assessments').select('*').eq('school_id', guardian.school_id),
+      supabase.from('subjects').select('*').eq('school_id', guardian.school_id),
+      supabase.from('schools').select('*').eq('id', guardian.school_id).single(),
+    ])
+    setParentGuardian({ ...guardian, students: nextStudents || [], fees: nextFees || [], payments: nextPayments || [], attendance: nextAttendance || [], grades: nextGrades || [], assessments: nextAssessments || [], subjects: nextSubjects || [] })
+    setParentSchool(parentSchoolData || null)
   }
 
   async function loadSchoolData(activeSchool = school, roleOverride = memberRole) {
@@ -619,7 +650,8 @@ function App() {
   if (!supabase) return <SetupCard />
   if (loading) return <LoadingScreen />
   if (!session) return <AuthScreen mode={authMode} setMode={setAuthMode} form={authForm} setForm={setAuthForm} message={authMessage} onSubmit={handleAuth} />
-  if (workspaceLoading && !school) return <LoadingScreen label="Chargement de votre espace…" />
+  if (workspaceLoading && !school && !parentGuardian) return <LoadingScreen label="Chargement de votre espace…" />
+  if (!school && parentGuardian) return <ParentPortal guardian={parentGuardian} school={parentSchool} signOut={signOut} />
   if (!school) return <Onboarding user={session.user} form={onboarding} setForm={setOnboarding} message={authMessage} onSubmit={createSchool} loading={workspaceLoading} signOut={signOut} />
 
   const activeLevelCount = levels.length
@@ -681,6 +713,16 @@ function Overview({ school, students, classes, levels, payments, onAddStudent, o
 }
 
 function Students({ students, total, search, setSearch, onAdd, onImport, classes }) { return <><PageHeading eyebrow="Base élèves" title="Élèves" subtitle={`${total} élève${total > 1 ? 's' : ''} dans votre établissement.`} actions={<><button type="button" className="light-btn" onClick={onImport}>↑ Importer</button><button type="button" className="light-btn" onClick={() => { const rows = students.map(student => [student.student_number, student.first_name, student.last_name]); const csv = [['matricule', 'prénom', 'nom'], ...rows].map(row => row.map(cell => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(';')).join('\\n'); const url = URL.createObjectURL(new Blob([`\\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' })); const link = document.createElement('a'); link.href = url; link.download = 'eleves-scolapilot.csv'; link.click(); URL.revokeObjectURL(url) }}>↓ Exporter</button><button type="button" className="primary-btn" onClick={onAdd}>+ Ajouter un élève</button></>} /><div className="cloud-panel"><div className="table-toolbar"><div className="search"><span>⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom ou matricule..." /></div><span className="muted-count">{students.length} résultat{students.length > 1 ? 's' : ''}</span></div>{students.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Matricule</th><th>Statut</th><th></th></tr></thead><tbody>{students.map(student => <tr key={student.id}><td><div className="table-person"><span className="student-avatar">{initials(`${student.first_name} ${student.last_name}`)}</span><div><b>{student.first_name} {student.last_name}</b><small>Élève ScolaPilot</small></div></div></td><td>{student.student_number}</td><td><span className="active-pill">Actif</span></td><td><button className="row-menu">•••</button></td></tr>)}</tbody></table></div> : <EmptyState icon="⌕" title="Aucun résultat" text="Ajoutez un élève ou modifiez votre recherche." action="Ajouter un élève" onClick={onAdd} />}</div></> }
+
+function ParentPortal({ guardian, school, signOut }) {
+  const [section, setSection] = useState('overview')
+  const students = guardian.students || []
+  const due = (guardian.fees || []).reduce((sum, fee) => sum + Number(fee.amount || 0) - Number(fee.discount || 0), 0)
+  const paid = (guardian.payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+  const balance = Math.max(due - paid, 0)
+  const subjectName = id => guardian.subjects?.find(subject => subject.id === id)?.name || 'Matière'
+  return <div className="parent-portal"><header className="parent-header"><div><span className="parent-logo">S</span><div><b>{school?.name || 'ScolaPilot'}</b><small>Espace parent sécurisé</small></div></div><button type="button" className="light-btn" onClick={signOut}>Se déconnecter</button></header><main className="parent-content"><div className="parent-welcome"><div><span className="cloud-eyebrow">Bonjour {guardian.full_name || 'Parent'} 👋</span><h1>Le suivi de votre enfant, simplement.</h1><p>Retrouvez les frais, présences et résultats depuis votre téléphone.</p></div><span className="parent-avatar">{initials(guardian.full_name)}</span></div><div className="cloud-kpis"><Metric icon="!" label="Solde à régler" value={money(balance)} note="Frais scolaires"/><Metric icon="✓" label="Déjà payé" value={money(paid)} note="Historique"/><Metric icon="♙" label="Enfants" value={students.length} note="Élève(s) rattaché(s)"/><Metric icon="⌁" label="Résultats" value={guardian.grades?.length || 0} note="Notes disponibles"/></div><nav className="parent-tabs"><button type="button" className={section === 'overview' ? 'active' : ''} onClick={() => setSection('overview')}>Vue d’ensemble</button><button type="button" className={section === 'fees' ? 'active' : ''} onClick={() => setSection('fees')}>Frais & reçus</button><button type="button" className={section === 'results' ? 'active' : ''} onClick={() => setSection('results')}>Résultats</button><button type="button" className={section === 'attendance' ? 'active' : ''} onClick={() => setSection('attendance')}>Présences</button></nav>{section === 'overview' && <div className="parent-grid"><div className="cloud-panel"><div className="panel-heading"><div><h2>Mes enfants</h2><p>Les informations partagées par l’école.</p></div></div>{students.length ? <div className="simple-list">{students.map(student => <div className="simple-row" key={student.id}><span className="student-avatar">{initials(`${student.first_name} ${student.last_name}`)}</span><div><b>{student.first_name} {student.last_name}</b><small>{student.student_number}</small></div><span className="active-pill">Actif</span></div>)}</div> : <EmptyState icon="♙" title="Aucun élève rattaché" text="Demandez à l’administration de vérifier votre dossier." action="Compris" onClick={() => {}} />}</div><div className="cloud-panel"><div className="panel-heading"><div><h2>Derniers paiements</h2><p>Vos opérations récentes.</p></div></div>{guardian.payments?.length ? <div className="simple-list">{guardian.payments.slice(0, 5).map(payment => <div className="simple-row" key={payment.id}><span className="class-icon">✓</span><div><b>{money(payment.amount)}</b><small>Reçu {payment.receipt_number} · {new Date(payment.paid_at).toLocaleDateString('fr-FR')}</small></div><span className="active-pill">Payé</span></div>)}</div> : <EmptyState icon="▣" title="Aucun paiement" text="Votre historique de règlements apparaîtra ici." action="Fermer" onClick={() => {}} />}</div></div>}{section === 'fees' && <div className="cloud-panel"><div className="panel-heading"><div><h2>Frais scolaires</h2><p>Consultez vos échéances et paiements.</p></div></div>{guardian.fees?.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Libellé</th><th>Montant</th><th>Échéance</th></tr></thead><tbody>{guardian.fees.map(fee => <tr key={fee.id}><td>{students.find(student => student.id === fee.student_id)?.first_name || 'Élève'}</td><td>{fee.label}</td><td><b>{money(Number(fee.amount || 0) - Number(fee.discount || 0))}</b></td><td>{fee.due_date ? new Date(fee.due_date).toLocaleDateString('fr-FR') : '—'}</td></tr>)}</tbody></table></div> : <EmptyState icon="◷" title="Aucun frais communiqué" text="Les frais publiés par l’école apparaîtront ici." action="Fermer" onClick={() => {}} />}</div>}{section === 'results' && <div className="cloud-panel"><div className="panel-heading"><div><h2>Résultats scolaires</h2><p>Notes publiées par l’équipe pédagogique.</p></div></div>{guardian.grades?.length ? <div className="table-scroll"><table><thead><tr><th>Élève</th><th>Matière</th><th>Évaluation</th><th>Note</th></tr></thead><tbody>{guardian.grades.map(grade => { const assessment = guardian.assessments?.find(item => item.id === grade.assessment_id); return <tr key={grade.id}><td>{students.find(student => student.id === grade.student_id)?.first_name || 'Élève'}</td><td>{subjectName(assessment?.subject_id)}</td><td>{assessment?.title || 'Évaluation'}</td><td><b>{grade.score} / {assessment?.max_score || 20}</b></td></tr>})}</tbody></table></div> : <EmptyState icon="⌁" title="Aucun résultat publié" text="Les notes apparaîtront après publication par l’école." action="Fermer" onClick={() => {}} />}</div>}{section === 'attendance' && <div className="cloud-panel"><div className="panel-heading"><div><h2>Présences</h2><p>Les derniers appels enregistrés par l’école.</p></div></div>{guardian.attendance?.length ? <div className="simple-list">{guardian.attendance.slice(0, 30).map(record => <div className="simple-row" key={record.id}><span className="class-icon">{record.status === 'present' ? '✓' : '!'}</span><div><b>{students.find(student => student.id === record.student_id)?.first_name || 'Élève'}</b><small>{new Date(record.attendance_date).toLocaleDateString('fr-FR')}</small></div><span className={`active-pill ${record.status === 'present' ? '' : 'late-pill'}`}>{record.status === 'present' ? 'Présent' : record.status}</span></div>)}</div> : <EmptyState icon="◷" title="Aucune présence publiée" text="Les appels de classe apparaîtront ici." action="Fermer" onClick={() => {}} />}</div>}</main></div>
+}
 
 function Communication({ students, guardians, links, fees, payments, logs, onSend }) {
   const [template, setTemplate] = useState('Bonjour, nous vous informons que le solde scolaire de {eleve} est de {solde}. Merci de contacter l’administration de l’école pour régulariser la situation.')
