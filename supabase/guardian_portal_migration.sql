@@ -62,7 +62,7 @@ drop policy if exists grades_parent_select on public.grades;
 create policy grades_parent_select on public.grades for select using (exists (select 1 from public.student_guardians sg join public.guardians g on g.id = sg.guardian_id where sg.student_id = grades.student_id and g.user_id = auth.uid()));
 
 drop policy if exists assessments_parent_select on public.assessments;
-create policy assessments_parent_select on public.assessments for select using (exists (select 1 from public.student_guardians sg join public.guardians g on g.id = sg.guardian_id where g.user_id = auth.uid() and public.is_school_member(assessments.school_id)));
+create policy assessments_parent_select on public.assessments for select using (exists (select 1 from public.guardians g where g.user_id = auth.uid() and g.school_id = assessments.school_id));
 
 drop policy if exists subjects_parent_select on public.subjects;
 create policy subjects_parent_select on public.subjects for select using (exists (select 1 from public.guardians g where g.user_id = auth.uid() and g.school_id = subjects.school_id));
